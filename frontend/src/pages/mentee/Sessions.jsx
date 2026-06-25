@@ -23,51 +23,67 @@ export default function MenteeSessions() {
   const past     = sessions.filter(s => s.session_type === 'live' && s.scheduled_at && new Date(s.scheduled_at) <= now && s.status !== 'live')
 
   const Card = ({ s }) => {
-    const isLive  = s.status === 'live'
-    const isRec   = s.session_type === 'recorded'
+    const isLive   = s.status === 'live'
+    const isRec    = s.session_type === 'recorded'
+    const isLocked = !!s.access_locked
     return (
-      <div style={{ background: '#fff', borderRadius: 14, border: isLive ? '2px solid #a78bfa' : '1px solid #f1f5f9', boxShadow: isLive ? '0 4px 16px rgba(124,58,237,0.12)' : '0 1px 6px rgba(0,0,0,0.05)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ background: '#fff', borderRadius: 14, border: isLive ? '2px solid #a78bfa' : '1px solid #f1f5f9', boxShadow: isLive ? '0 4px 16px rgba(124,58,237,0.12)' : '0 1px 6px rgba(0,0,0,0.05)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12, opacity: isLocked ? 0.85 : 1 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: isLive ? '#ede9fe' : isRec ? '#f5f3ff' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-            {isLive ? '🔴' : isRec ? '📹' : '🎥'}
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: isLocked ? '#f1f5f9' : isLive ? '#ede9fe' : isRec ? '#f5f3ff' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+            {isLocked ? '🔒' : isLive ? '🔴' : isRec ? '📹' : '🎥'}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</p>
+            <p style={{ fontSize: 14, fontWeight: 700, color: isLocked ? '#94a3b8' : '#1e293b', margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</p>
             <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>{s.program_title}</p>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 50, flexShrink: 0,
-            background: isLive ? '#ede9fe' : isRec ? '#f5f3ff' : '#eff6ff',
-            color:      isLive ? '#7c3aed' : isRec ? '#6d28d9' : '#1d4ed8' }}>
-            {isLive ? '🔴 Live' : isRec ? 'Recorded' : 'Upcoming'}
-          </span>
+          {isLocked ? (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 50, flexShrink: 0, background: '#fffbeb', color: '#92400e' }}>
+              ⏳ Pending
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 50, flexShrink: 0,
+              background: isLive ? '#ede9fe' : isRec ? '#f5f3ff' : '#eff6ff',
+              color:      isLive ? '#7c3aed' : isRec ? '#6d28d9' : '#1d4ed8' }}>
+              {isLive ? '🔴 Live' : isRec ? 'Recorded' : 'Upcoming'}
+            </span>
+          )}
         </div>
         {s.scheduled_at && (
           <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
             📅 {new Date(s.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
           </p>
         )}
-        {s.session_type === 'live' && s.meeting_link && (
-          <div style={{ display: 'flex', gap: 10 }}>
-            <a href={s.meeting_link} target="_blank" rel="noreferrer"
-              style={{ flex: 1, textDecoration: 'none', textAlign: 'center', padding: '9px 0', borderRadius: 9, fontSize: 12, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', boxShadow: '0 3px 10px rgba(124,58,237,0.35)' }}>
-              Join Meeting →
-            </a>
-            {!s.joined && (
-              <button onClick={() => handleJoin(s.session_id)} disabled={joining === s.session_id}
-                style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #a78bfa', fontSize: 12, fontWeight: 600, color: '#7c3aed', background: '#fff', cursor: joining === s.session_id ? 'not-allowed' : 'pointer' }}>
-                {joining === s.session_id ? '…' : 'Mark Joined'}
-              </button>
-            )}
-            {s.joined && (
-              <span style={{ padding: '9px 16px', fontSize: 12, fontWeight: 700, color: '#15803d' }}>✓ Joined</span>
-            )}
+        {isLocked ? (
+          <div style={{ padding: '10px 14px', borderRadius: 9, background: '#fffbeb', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14 }}>🔒</span>
+            <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>Access unlocks after admin approval</span>
           </div>
-        )}
-        {isRec && s.video_url && (
-          <a href={s.video_url} target="_blank" rel="noreferrer"
-            style={{ textDecoration: 'none', textAlign: 'center', padding: '9px 0', borderRadius: 9, fontSize: 12, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg,#6d28d9,#7c3aed)' }}>
-            Watch Recording →
-          </a>
+        ) : (
+          <>
+            {s.session_type === 'live' && s.meeting_link && (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <a href={s.meeting_link} target="_blank" rel="noreferrer"
+                  style={{ flex: 1, textDecoration: 'none', textAlign: 'center', padding: '9px 0', borderRadius: 9, fontSize: 12, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', boxShadow: '0 3px 10px rgba(124,58,237,0.35)' }}>
+                  Join Meeting →
+                </a>
+                {!s.joined && (
+                  <button onClick={() => handleJoin(s.session_id)} disabled={joining === s.session_id}
+                    style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #a78bfa', fontSize: 12, fontWeight: 600, color: '#7c3aed', background: '#fff', cursor: joining === s.session_id ? 'not-allowed' : 'pointer' }}>
+                    {joining === s.session_id ? '…' : 'Mark Joined'}
+                  </button>
+                )}
+                {s.joined && (
+                  <span style={{ padding: '9px 16px', fontSize: 12, fontWeight: 700, color: '#15803d' }}>✓ Joined</span>
+                )}
+              </div>
+            )}
+            {isRec && s.video_url && (
+              <a href={s.video_url} target="_blank" rel="noreferrer"
+                style={{ textDecoration: 'none', textAlign: 'center', padding: '9px 0', borderRadius: 9, fontSize: 12, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg,#6d28d9,#7c3aed)' }}>
+                Watch Recording →
+              </a>
+            )}
+          </>
         )}
       </div>
     )

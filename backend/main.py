@@ -35,6 +35,7 @@ from models.email_otp import EmailOTP
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
+    enrollment_request_admin_email, enrollment_approved_email, enrollment_rejected_email,
 )
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -1162,21 +1163,26 @@ def _do_enroll(program_id: str, current_user: User, db: Session):
     program = db.query(Program).filter(Program.program_id == program_id, Program.status == "active").first()
     if not program:
         raise HTTPException(status_code=404, detail="Program not found or not active")
-    if db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id, Enrollment.program_id == program_id).first():
-        raise HTTPException(status_code=400, detail="Already enrolled")
+    existing = db.query(Enrollment).filter(
+        Enrollment.user_id == current_user.user_id, Enrollment.program_id == program_id
+    ).first()
+    if existing and existing.status in ("enrolled", "active", "pending", "certificate_eligible", "completed"):
+        raise HTTPException(status_code=400, detail="Already enrolled or request pending")
     enrollment = Enrollment(
         enrollment_id=generate_enrollment_id(),
-        user_id=current_user.user_id, program_id=program_id, status="enrolled"
+        user_id=current_user.user_id, program_id=program_id, status="pending"
     )
     db.add(enrollment)
     db.commit()
-    html = enrollment_confirmation_email(
-        full_name=current_user.full_name, program_title=program.title,
-        program_description=program.description,
-        start_date=str(program.start_date) if program.start_date else None
-    )
-    threading.Thread(target=send_email, args=(current_user.email, f"Enrolled: {program.title}", html)).start()
-    return {"success": True, "enrollment_id": enrollment.enrollment_id}
+    # Notify all admins
+    admins = db.query(User).filter(User.role == "admin").all()
+    for admin in admins:
+        html = enrollment_request_admin_email(
+            admin_name=admin.full_name, mentee_name=current_user.full_name,
+            mentee_email=current_user.email, program_title=program.title
+        )
+        threading.Thread(target=send_email, args=(admin.email, f"New Enrollment Request: {program.title}", html)).start()
+    return {"success": True, "enrollment_id": enrollment.enrollment_id, "status": "pending"}
 
 @app.delete("/api/mentee/enrollments/{enrollment_id}")
 def mentee_unenroll(enrollment_id: str, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
@@ -1190,6 +1196,84 @@ def mentee_unenroll(enrollment_id: str, current_user: User = Depends(require_men
     db.delete(enrollment)
     db.commit()
     return {"success": True}
+
+# ── ENROLLMENT APPROVAL WORKFLOW ─────────────────────────────────────────────
+
+@app.get("/api/admin/enrollment-requests")
+def admin_get_enrollment_requests(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    pending = db.query(Enrollment).filter(Enrollment.status == "pending").all()
+    if not pending:
+        return []
+    user_ids = [e.user_id for e in pending]
+    prog_ids = [e.program_id for e in pending]
+    users_map = {u.user_id: u for u in db.query(User).filter(User.user_id.in_(user_ids)).all()}
+    programs_map = {p.program_id: p for p in db.query(Program).filter(Program.program_id.in_(prog_ids)).all()}
+    return [
+        {"enrollment_id": e.enrollment_id, "user_id": e.user_id,
+         "full_name": users_map[e.user_id].full_name if e.user_id in users_map else e.user_id,
+         "email": users_map[e.user_id].email if e.user_id in users_map else None,
+         "program_id": e.program_id,
+         "program_title": programs_map[e.program_id].title if e.program_id in programs_map else e.program_id,
+         "requested_at": str(e.enrollment_date)}
+        for e in pending
+    ]
+
+@app.post("/api/admin/enrollment-requests/{enrollment_id}/approve")
+def admin_approve_enrollment(enrollment_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.enrollment_id == enrollment_id, Enrollment.status == "pending"
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Request not found")
+    mentee = db.query(User).filter(User.user_id == enrollment.user_id).first()
+    program = db.query(Program).filter(Program.program_id == enrollment.program_id).first()
+    enrollment.status = "enrolled"
+    db.commit()
+    if mentee and program:
+        html = enrollment_approved_email(mentee.full_name, program.title)
+        threading.Thread(target=send_email, args=(mentee.email, f"Enrollment Approved: {program.title}", html)).start()
+    return {"success": True}
+
+@app.post("/api/admin/enrollment-requests/{enrollment_id}/reject")
+def admin_reject_enrollment(enrollment_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.enrollment_id == enrollment_id, Enrollment.status == "pending"
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Request not found")
+    mentee = db.query(User).filter(User.user_id == enrollment.user_id).first()
+    program = db.query(Program).filter(Program.program_id == enrollment.program_id).first()
+    db.delete(enrollment)
+    db.commit()
+    if mentee and program:
+        html = enrollment_rejected_email(mentee.full_name, program.title)
+        threading.Thread(target=send_email, args=(mentee.email, f"Enrollment Update: {program.title}", html)).start()
+    return {"success": True}
+
+@app.get("/api/mentor/enrollment-requests")
+def mentor_get_enrollment_requests(current_user: User = Depends(require_mentor), db: Session = Depends(get_db)):
+    mentor = db.query(Mentor).filter(Mentor.user_id == current_user.user_id).first()
+    if not mentor:
+        return []
+    prog_ids = [p.program_id for p in db.query(Program).filter(Program.assigned_mentor == mentor.mentor_profile_id).all()]
+    if not prog_ids:
+        return []
+    pending = db.query(Enrollment).filter(
+        Enrollment.program_id.in_(prog_ids), Enrollment.status == "pending"
+    ).all()
+    if not pending:
+        return []
+    user_ids = [e.user_id for e in pending]
+    prog_map = {p.program_id: p.title for p in db.query(Program).filter(Program.program_id.in_(prog_ids)).all()}
+    users_map = {u.user_id: u for u in db.query(User).filter(User.user_id.in_(user_ids)).all()}
+    return [
+        {"enrollment_id": e.enrollment_id,
+         "full_name": users_map[e.user_id].full_name if e.user_id in users_map else e.user_id,
+         "email": users_map[e.user_id].email if e.user_id in users_map else None,
+         "program_title": prog_map.get(e.program_id, e.program_id),
+         "requested_at": str(e.enrollment_date)}
+        for e in pending
+    ]
 
 @app.get("/api/mentee/enrollments")
 def my_enrollments(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
@@ -1226,12 +1310,14 @@ def my_enrollments(current_user: User = Depends(require_mentee), db: Session = D
 @app.get("/api/mentee/sessions")
 def my_sessions(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
     enrollments = db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id).all()
-    program_ids = [e.program_id for e in enrollments]
-    if not program_ids:
+    if not enrollments:
         return []
-    sessions = db.query(MentorSession).filter(MentorSession.program_id.in_(program_ids)).all()
+    enrolled_prog_ids = {e.program_id for e in enrollments if e.status in ("enrolled", "active", "certificate_eligible", "completed")}
+    pending_prog_ids  = {e.program_id for e in enrollments if e.status == "pending"}
+    all_prog_ids = enrolled_prog_ids | pending_prog_ids
+    sessions = db.query(MentorSession).filter(MentorSession.program_id.in_(all_prog_ids)).all()
     programs_map = {p.program_id: p.title for p in db.query(Program).filter(
-        Program.program_id.in_(program_ids)).all()}
+        Program.program_id.in_(all_prog_ids)).all()}
     completions = {c.session_id for c in db.query(SessionCompletion).filter(
         SessionCompletion.user_id == current_user.user_id, SessionCompletion.completed == True).all()}
     return [
@@ -1241,7 +1327,8 @@ def my_sessions(current_user: User = Depends(require_mentee), db: Session = Depe
          "scheduled_at": str(s.scheduled_at) if s.scheduled_at else None,
          "meeting_link": s.meeting_link, "video_url": s.video_url,
          "duration_minutes": s.duration_minutes, "status": s.status,
-         "is_completed": s.session_id in completions}
+         "is_completed": s.session_id in completions,
+         "access_locked": s.program_id in pending_prog_ids}
         for s in sessions
     ]
 

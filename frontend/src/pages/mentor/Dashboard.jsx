@@ -6,11 +6,13 @@ import api from '../../api/client'
 
 export default function MentorDashboard() {
   const { user } = useAuth()
-  const [stats, setStats] = useState(null)
+  const [stats,    setStats]    = useState(null)
   const [sessions, setSessions] = useState([])
+  const [requests, setRequests] = useState([])
 
   useEffect(() => {
     api.get('/api/mentor/dashboard').then(r => setStats(r.data?.stats ?? r.data)).catch(() => {})
+    api.get('/api/mentor/enrollment-requests').then(r => setRequests(r.data)).catch(() => {})
     api.get('/api/mentor/sessions').then(r => {
       const now = new Date()
       setSessions(r.data
@@ -77,6 +79,53 @@ export default function MentorDashboard() {
           </div>
         ))}
       </div>
+
+      {/* ── Pending Enrollment Requests (mentor's programs) ── */}
+      {requests.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.06)', border: '1px solid #fde68a', marginBottom: 28, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 24px', borderBottom: '1px solid #fef3c7', background: '#fffbeb', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>📋</span>
+            <div style={{ flex: 1 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 700, color: '#92400e', margin: 0 }}>Pending Enrollment Requests</h2>
+              <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>Mentees awaiting admin approval for your programs</p>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 12px', borderRadius: 50, background: '#fde68a', color: '#92400e' }}>{requests.length}</span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#fafafa' }}>
+                  {['Mentee', 'Email', 'Program', 'Requested'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '10px 20px', fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((r, i) => (
+                  <tr key={r.enrollment_id} style={{ background: i % 2 === 0 ? '#fff' : '#fffbeb', borderBottom: '1px solid #fef9c3' }}>
+                    <td style={{ padding: '12px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+                          {r.full_name[0]}
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{r.full_name}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 20px', fontSize: 12, color: '#64748b' }}>{r.email}</td>
+                    <td style={{ padding: '12px 20px', fontSize: 13, fontWeight: 600, color: '#4f46e5' }}>{r.program_title}</td>
+                    <td style={{ padding: '12px 20px', fontSize: 12, color: '#94a3b8' }}>
+                      {r.requested_at ? new Date(r.requested_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ padding: '12px 20px', background: '#fffbeb', borderTop: '1px solid #fef3c7' }}>
+            <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>🔑 Admin approves/rejects enrollment requests. Contact your admin to process these.</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Quick Actions + My Sessions ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.75fr', gap: 20 }}>

@@ -24,8 +24,32 @@ const QUICK = [
 
 export default function AdminDashboard() {
   const { user } = useAuth()
-  const [stats, setStats] = useState(null)
-  useEffect(() => { api.get('/api/admin/dashboard').then(r => setStats(r.data)).catch(() => {}) }, [])
+  const [stats,    setStats]    = useState(null)
+  const [requests, setRequests] = useState([])
+  const [acting,   setActing]   = useState(null)
+
+  const loadRequests = () => api.get('/api/admin/enrollment-requests').then(r => setRequests(r.data)).catch(() => {})
+
+  useEffect(() => {
+    api.get('/api/admin/dashboard').then(r => setStats(r.data)).catch(() => {})
+    loadRequests()
+  }, [])
+
+  const approve = async id => {
+    setActing(id + 'approve')
+    await api.post(`/api/admin/enrollment-requests/${id}/approve`).catch(() => {})
+    await loadRequests()
+    setActing(null)
+  }
+
+  const reject = async id => {
+    if (!confirm('Reject this enrollment request?')) return
+    setActing(id + 'reject')
+    await api.post(`/api/admin/enrollment-requests/${id}/reject`).catch(() => {})
+    await loadRequests()
+    setActing(null)
+  }
+
   const name = user?.full_name?.split(' ')[0] ?? 'Admin'
 
   return (
@@ -64,6 +88,76 @@ export default function AdminDashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Enrollment Requests */}
+      <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg,#f59e0b,#f97316)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>📋</div>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: 0 }}>Enrollment Requests</h2>
+              <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Review and approve mentee enrollment applications</p>
+            </div>
+          </div>
+          {requests.length > 0 && (
+            <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 14px', borderRadius: 50, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+              {requests.length} pending
+            </span>
+          )}
+        </div>
+        {requests.length === 0 ? (
+          <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>✅</div>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#475569', margin: '0 0 4px' }}>All caught up!</p>
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No pending enrollment requests at the moment.</p>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                {['Mentee', 'Email', 'Program', 'Requested', 'Action'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '10px 20px', fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((r, i) => (
+                <tr key={r.enrollment_id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f8fafc' }}>
+                  <td style={{ padding: '13px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
+                        {r.full_name[0]}
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{r.full_name}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '13px 20px', fontSize: 12, color: '#64748b' }}>{r.email}</td>
+                  <td style={{ padding: '13px 20px', fontSize: 13, fontWeight: 600, color: '#1e293b', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.program_title}</td>
+                  <td style={{ padding: '13px 20px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                    {r.requested_at ? new Date(r.requested_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                  </td>
+                  <td style={{ padding: '13px 20px' }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => approve(r.enrollment_id)} disabled={acting === r.enrollment_id + 'approve'}
+                        style={{ padding: '6px 16px', borderRadius: 8, border: 'none', cursor: acting ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, color: '#fff', background: acting === r.enrollment_id + 'approve' ? '#6ee7b7' : 'linear-gradient(135deg,#059669,#10b981)', boxShadow: '0 2px 8px rgba(5,150,105,0.3)' }}
+                        onMouseEnter={e => { if (!acting) e.currentTarget.style.opacity = '0.85' }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}>
+                        {acting === r.enrollment_id + 'approve' ? '…' : '✓ Approve'}
+                      </button>
+                      <button onClick={() => reject(r.enrollment_id)} disabled={!!acting}
+                        style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px solid #fecaca', cursor: acting ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, color: '#dc2626', background: '#fef2f2' }}
+                        onMouseEnter={e => { if (!acting) { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = '#fff' } }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626' }}>
+                        {acting === r.enrollment_id + 'reject' ? '…' : '✕ Reject'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Quick Actions + Module Links */}

@@ -15,6 +15,7 @@ const EMOJIS = ['⚡', '🎯', '🚀', '📐', '🧩', '📊']
 export default function MenteePrograms() {
   const [programs, setPrograms] = useState([])
   const [enrolledIds, setEnrolledIds] = useState(new Set())
+  const [pendingIds, setPendingIds]   = useState(new Set())
   const [enrolling, setEnrolling] = useState(null)
   const [search, setSearch] = useState('')
 
@@ -24,7 +25,8 @@ export default function MenteePrograms() {
       api.get('/api/mentee/enrollments').then(r => r.data),
     ])
     setPrograms(progs)
-    setEnrolledIds(new Set(enrollments.map(e => e.program_id)))
+    setEnrolledIds(new Set(enrollments.filter(e => e.status !== 'pending').map(e => e.program_id)))
+    setPendingIds(new Set(enrollments.filter(e => e.status === 'pending').map(e => e.program_id)))
   }
   useEffect(() => { load() }, [])
 
@@ -32,7 +34,9 @@ export default function MenteePrograms() {
     setEnrolling(id)
     try {
       await api.post('/api/mentee/enrollments', { program_id: id })
-      setEnrolledIds(s => new Set([...s, id]))
+      setPendingIds(s => new Set([...s, id]))
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Request failed')
     } finally { setEnrolling(null) }
   }
 
@@ -76,11 +80,17 @@ export default function MenteePrograms() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20 }}>
           {filtered.map((p, idx) => {
             const enrolled = enrolledIds.has(p.program_id)
+            const pending  = pendingIds.has(p.program_id)
             return (
               <div key={p.program_id} style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {/* Gradient header */}
-                <div style={{ background: GRAD[idx % GRAD.length], padding: '28px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 110 }}>
+                <div style={{ background: GRAD[idx % GRAD.length], padding: '28px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 110, position: 'relative' }}>
                   <span style={{ fontSize: 52, lineHeight: 1 }}>{EMOJIS[idx % EMOJIS.length]}</span>
+                  {pending && (
+                    <div style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(255,255,255,0.9)', borderRadius: 50, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#92400e' }}>
+                      ⏳ Pending
+                    </div>
+                  )}
                 </div>
                 {/* Body */}
                 <div style={{ padding: '20px 20px 22px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
@@ -104,10 +114,14 @@ export default function MenteePrograms() {
                       <div style={{ width: '100%', padding: '10px 0', borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#15803d' }}>
                         ✓ Enrolled
                       </div>
+                    ) : pending ? (
+                      <div style={{ width: '100%', padding: '10px 0', borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a', textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#92400e' }}>
+                        ⏳ Awaiting Approval
+                      </div>
                     ) : (
                       <button onClick={() => handleEnroll(p.program_id)} disabled={enrolling === p.program_id}
                         style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', cursor: enrolling === p.program_id ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, color: '#fff', background: enrolling === p.program_id ? '#c4b5fd' : 'linear-gradient(135deg,#7c3aed,#a855f7)', boxShadow: '0 4px 12px rgba(124,58,237,0.35)' }}>
-                        {enrolling === p.program_id ? 'Enrolling…' : 'Enroll Now'}
+                        {enrolling === p.program_id ? 'Sending Request…' : 'Request Enrollment'}
                       </button>
                     )}
                   </div>

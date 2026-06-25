@@ -149,6 +149,80 @@ def enrollment_confirmation_email(full_name: str, program_title: str,
     </div>
     """
 
+def enrollment_request_admin_email(admin_name: str, mentee_name: str, mentee_email: str, program_title: str) -> str:
+    return f"""
+    <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
+      <div style="background:linear-gradient(135deg,#0F2645,#1a3a6b);padding:32px 36px;">
+        <div style="font-size:1.2rem;font-weight:800;color:white;">Agile<span style="color:#60A5FA;">Mentor</span></div>
+      </div>
+      <div style="padding:36px;">
+        <div style="display:inline-block;padding:4px 12px;background:#FEF3C7;color:#92400E;font-size:0.75rem;font-weight:700;border-radius:20px;margin-bottom:16px;">
+          📋 NEW ENROLLMENT REQUEST
+        </div>
+        <h2 style="font-size:1.2rem;font-weight:700;color:#0F2645;margin-bottom:6px;">Enrollment Request Received</h2>
+        <p style="font-size:0.88rem;color:#64748B;margin-bottom:20px;">Hi {admin_name}, a new mentee has requested to enroll in a program.</p>
+        <div style="background:#F4F7FF;border-radius:12px;padding:18px 20px;margin-bottom:24px;">
+          <div style="font-size:1rem;font-weight:700;color:#0F2645;margin-bottom:8px;">📚 {program_title}</div>
+          <div style="font-size:0.85rem;color:#64748B;margin-bottom:4px;">👤 Mentee: <strong>{mentee_name}</strong></div>
+          <div style="font-size:0.85rem;color:#64748B;">✉️ Email: {mentee_email}</div>
+        </div>
+        <p style="font-size:0.85rem;color:#64748B;margin-bottom:20px;">Please log in to the admin dashboard to review and approve or reject this request.</p>
+        <hr style="border:none;border-top:1px solid #E2E8F4;margin:24px 0;"/>
+        <p style="font-size:0.75rem;color:#CBD5E1;">© 2026 AgileMentor. All rights reserved.</p>
+      </div>
+    </div>
+    """
+
+
+def enrollment_approved_email(full_name: str, program_title: str) -> str:
+    return f"""
+    <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
+      <div style="background:linear-gradient(135deg,#0F2645,#1a3a6b);padding:32px 36px;">
+        <div style="font-size:1.2rem;font-weight:800;color:white;">Agile<span style="color:#60A5FA;">Mentor</span></div>
+      </div>
+      <div style="padding:36px;">
+        <div style="display:inline-block;padding:4px 12px;background:#DCFCE7;color:#15803D;font-size:0.75rem;font-weight:700;border-radius:20px;margin-bottom:16px;">
+          ✅ ENROLLMENT APPROVED
+        </div>
+        <h2 style="font-size:1.2rem;font-weight:700;color:#0F2645;margin-bottom:6px;">You're in! Enrollment Approved</h2>
+        <p style="font-size:0.88rem;color:#64748B;margin-bottom:20px;">Hi {full_name}, great news! Your enrollment request has been reviewed and approved.</p>
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:18px 20px;margin-bottom:24px;">
+          <div style="font-size:1rem;font-weight:700;color:#15803D;margin-bottom:4px;">📚 {program_title}</div>
+          <div style="font-size:0.82rem;color:#166534;">You now have full access to all sessions and resources.</div>
+        </div>
+        <p style="font-size:0.82rem;color:#64748B;margin-bottom:20px;">Head to your dashboard to start exploring your sessions and learning materials.</p>
+        <hr style="border:none;border-top:1px solid #E2E8F4;margin:24px 0;"/>
+        <p style="font-size:0.75rem;color:#CBD5E1;">© 2026 AgileMentor. All rights reserved.</p>
+      </div>
+    </div>
+    """
+
+
+def enrollment_rejected_email(full_name: str, program_title: str) -> str:
+    return f"""
+    <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
+      <div style="background:linear-gradient(135deg,#0F2645,#1a3a6b);padding:32px 36px;">
+        <div style="font-size:1.2rem;font-weight:800;color:white;">Agile<span style="color:#60A5FA;">Mentor</span></div>
+      </div>
+      <div style="padding:36px;">
+        <div style="display:inline-block;padding:4px 12px;background:#FEE2E2;color:#DC2626;font-size:0.75rem;font-weight:700;border-radius:20px;margin-bottom:16px;">
+          ❌ ENROLLMENT NOT APPROVED
+        </div>
+        <h2 style="font-size:1.2rem;font-weight:700;color:#0F2645;margin-bottom:6px;">Enrollment Request Update</h2>
+        <p style="font-size:0.88rem;color:#64748B;margin-bottom:20px;">Hi {full_name}, we've reviewed your enrollment request and unfortunately we're unable to approve it at this time.</p>
+        <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:18px 20px;margin-bottom:24px;">
+          <div style="font-size:1rem;font-weight:700;color:#DC2626;margin-bottom:4px;">📚 {program_title}</div>
+          <div style="font-size:0.82rem;color:#991B1B;">Your request could not be approved at this time.</div>
+        </div>
+        <p style="font-size:0.82rem;color:#64748B;margin-bottom:8px;">You're welcome to submit a new request for this or any other program in the future.</p>
+        <p style="font-size:0.82rem;color:#64748B;margin-bottom:20px;">If you have questions, please contact us directly.</p>
+        <hr style="border:none;border-top:1px solid #E2E8F4;margin:24px 0;"/>
+        <p style="font-size:0.75rem;color:#CBD5E1;">© 2026 AgileMentor. All rights reserved.</p>
+      </div>
+    </div>
+    """
+
+
 def otp_verification_email(full_name: str, otp_code: str) -> str:
     return f"""
     <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">

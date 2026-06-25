@@ -4,6 +4,7 @@ import MenteeLayout from '../../components/layouts/MenteeLayout'
 import api from '../../api/client'
 
 const STATUS_STYLE = {
+  pending:               { bg: '#fffbeb', color: '#92400e', label: '⏳ Pending Approval' },
   enrolled:              { bg: '#eff6ff', color: '#1d4ed8', label: 'Enrolled' },
   active:                { bg: '#eff6ff', color: '#1d4ed8', label: 'Enrolled' },
   certificate_eligible:  { bg: '#fffbeb', color: '#92400e', label: 'Cert. Eligible' },
@@ -71,6 +72,17 @@ export default function MenteeEnrollments() {
                     <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#7c3aed,#a855f7)', width: `${progress}%`, transition: 'width 0.4s ease' }} />
                   </div>
                 </div>
+
+                {/* Pending approval banner */}
+                {e.status === 'pending' && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a' }}>
+                    <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>⏳</span>
+                    <div>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: '#92400e', margin: '0 0 2px' }}>Awaiting Admin Approval</p>
+                      <p style={{ fontSize: 11, color: '#b45309', margin: 0, lineHeight: 1.4 }}>Your request has been submitted. The admin will review and approve your enrollment. You'll receive an email once it's processed.</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Certificate badge */}
                 {e.certificate_issued && (
