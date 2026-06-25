@@ -555,7 +555,7 @@ def admin_create_program(body: CreateProgramBody, current_user: User = Depends(r
         category=body.category, duration_weeks=body.duration_weeks,
         start_date=body.start_date, end_date=body.end_date,
         created_by=current_user.user_id,
-        assigned_mentor=body.assigned_mentor or None, status="pending"
+        assigned_mentor=body.assigned_mentor or None, status="active"
     )
     db.add(program)
     db.commit()
