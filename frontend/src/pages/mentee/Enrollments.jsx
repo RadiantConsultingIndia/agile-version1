@@ -4,9 +4,11 @@ import MenteeLayout from '../../components/layouts/MenteeLayout'
 import api from '../../api/client'
 
 const STATUS_STYLE = {
-  enrolled:  { bg: '#eff6ff', color: '#1d4ed8', label: 'Enrolled' },
-  completed: { bg: '#f0fdf4', color: '#15803d', label: 'Completed' },
-  dropped:   { bg: '#fef2f2', color: '#dc2626', label: 'Dropped' },
+  enrolled:              { bg: '#eff6ff', color: '#1d4ed8', label: 'Enrolled' },
+  active:                { bg: '#eff6ff', color: '#1d4ed8', label: 'Enrolled' },
+  certificate_eligible:  { bg: '#fffbeb', color: '#92400e', label: 'Cert. Eligible' },
+  completed:             { bg: '#f0fdf4', color: '#15803d', label: 'Completed' },
+  dropped:               { bg: '#fef2f2', color: '#dc2626', label: 'Dropped' },
 }
 
 export default function MenteeEnrollments() {
@@ -79,7 +81,7 @@ export default function MenteeEnrollments() {
                 )}
 
                 {/* Actions */}
-                {e.status === 'enrolled' && (
+                {(e.status === 'enrolled' || e.status === 'active') && (
                   <div style={{ display: 'flex', gap: 12, paddingTop: 4, borderTop: '1px solid #f8fafc' }}>
                     <button onClick={() => handleUnenroll(e.enrollment_id)}
                       style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>

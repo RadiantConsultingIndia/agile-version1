@@ -10,7 +10,7 @@ export default function MentorDashboard() {
   const [sessions, setSessions] = useState([])
 
   useEffect(() => {
-    api.get('/api/mentor/dashboard').then(r => setStats(r.data)).catch(() => {})
+    api.get('/api/mentor/dashboard').then(r => setStats(r.data?.stats ?? r.data)).catch(() => {})
     api.get('/api/mentor/sessions').then(r => {
       const now = new Date()
       setSessions(r.data

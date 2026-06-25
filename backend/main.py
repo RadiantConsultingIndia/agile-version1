@@ -457,7 +457,7 @@ def admin_dashboard(current_user: User = Depends(require_admin), db: Session = D
         "total_programs":       db.query(Program).count(),
         "active_programs":      db.query(Program).filter(Program.status == "active").count(),
         "total_sessions":       db.query(MentorSession).count(),
-        "live_sessions":        db.query(MentorSession).filter(MentorSession.session_type == "live").count(),
+        "live_sessions":        db.query(MentorSession).filter(MentorSession.status == "live").count(),
         "total_users":          db.query(User).filter(User.role != "admin").count(),
         "total_mentors":        db.query(User).filter(User.role == "mentor").count(),
         "total_enrollments":    db.query(Enrollment).count(),
@@ -679,7 +679,7 @@ def admin_get_attendance(session_id: str, current_user: User = Depends(require_a
         Attendance.session_id == session_id, Attendance.user_id.in_(enrolled_ids)).all()}
     return {
         "session": {"session_id": session.session_id, "title": session.title,
-                    "duration_minutes": session.duration_minutes},
+                    "session_type": session.session_type, "duration_minutes": session.duration_minutes},
         "mentees": [{"user_id": uid, "full_name": users_map[uid].full_name if uid in users_map else uid,
                      "status": att_map[uid].status if uid in att_map else None,
                      "marked_at": str(att_map[uid].marked_at) if uid in att_map and att_map[uid].marked_at else None}
@@ -965,8 +965,9 @@ def mentor_get_resources(current_user: User = Depends(require_mentor), db: Sessi
     prog_res = db.query(Resource).filter(Resource.scope == "program", Resource.program_id.in_(prog_ids),
                                           Resource.uploaded_by != current_user.user_id).all() if prog_ids else []
     resources = own + global_res + prog_res
-    return [{"resource_id": r.resource_id, "title": r.title, "file_url": r.file_url,
-             "file_type": r.file_type, "scope": r.scope, "program_id": r.program_id} for r in resources]
+    return [{"resource_id": r.resource_id, "title": r.title, "description": r.description,
+             "file_url": r.file_url, "file_type": r.file_type, "scope": r.scope,
+             "program_id": r.program_id} for r in resources]
 
 @app.post("/api/mentor/resources")
 async def mentor_upload_resource(
@@ -989,7 +990,7 @@ async def mentor_upload_resource(
     url = upload_file(contents, folder="agilementor/resources", resource_type=cld_type)
     resource = Resource(
         resource_id=generate_resource_id(), title=title, description=description or None,
-        file_url=url, file_type=file_type, scope="program",
+        file_url=url, file_type=file_type, scope="program" if program_id else "global",
         program_id=program_id or None, session_id=session_id or None,
         uploaded_by=current_user.user_id,
     )
@@ -1125,13 +1126,39 @@ def mentee_dashboard(current_user: User = Depends(require_mentee), db: Session =
 @app.get("/api/programs")
 def get_programs(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
     programs = db.query(Program).filter(Program.status == "active").all()
+    mentors = {m.mentor_profile_id: u.full_name
+               for m, u in db.query(Mentor, User).join(User, Mentor.user_id == User.user_id).all()}
     return [{"program_id": p.program_id, "title": p.title, "description": p.description,
              "category": p.category, "duration_weeks": p.duration_weeks,
+             "mentor_name": mentors.get(p.assigned_mentor),
              "start_date": str(p.start_date) if p.start_date else None,
              "end_date": str(p.end_date) if p.end_date else None} for p in programs]
 
+# Alias used by mentee Browse Programs page
+@app.get("/api/mentee/programs/browse")
+def mentee_browse_programs(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    programs = db.query(Program).filter(Program.status == "active").all()
+    mentors = {m.mentor_profile_id: u.full_name
+               for m, u in db.query(Mentor, User).join(User, Mentor.user_id == User.user_id).all()}
+    return [{"program_id": p.program_id, "title": p.title, "description": p.description,
+             "category": p.category, "duration_weeks": p.duration_weeks,
+             "mentor_name": mentors.get(p.assigned_mentor),
+             "start_date": str(p.start_date) if p.start_date else None,
+             "end_date": str(p.end_date) if p.end_date else None} for p in programs]
+
+class EnrollBody(BaseModel):
+    program_id: str
+
 @app.post("/api/enroll/{program_id}")
 def enroll(program_id: str, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    return _do_enroll(program_id, current_user, db)
+
+# Alias used by mentee frontend
+@app.post("/api/mentee/enrollments")
+def mentee_enroll(body: EnrollBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    return _do_enroll(body.program_id, current_user, db)
+
+def _do_enroll(program_id: str, current_user: User, db: Session):
     program = db.query(Program).filter(Program.program_id == program_id, Program.status == "active").first()
     if not program:
         raise HTTPException(status_code=404, detail="Program not found or not active")
@@ -1139,7 +1166,7 @@ def enroll(program_id: str, current_user: User = Depends(require_mentee), db: Se
         raise HTTPException(status_code=400, detail="Already enrolled")
     enrollment = Enrollment(
         enrollment_id=generate_enrollment_id(),
-        user_id=current_user.user_id, program_id=program_id, status="active"
+        user_id=current_user.user_id, program_id=program_id, status="enrolled"
     )
     db.add(enrollment)
     db.commit()
@@ -1151,6 +1178,19 @@ def enroll(program_id: str, current_user: User = Depends(require_mentee), db: Se
     threading.Thread(target=send_email, args=(current_user.email, f"Enrolled: {program.title}", html)).start()
     return {"success": True, "enrollment_id": enrollment.enrollment_id}
 
+@app.delete("/api/mentee/enrollments/{enrollment_id}")
+def mentee_unenroll(enrollment_id: str, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.enrollment_id == enrollment_id,
+        Enrollment.user_id == current_user.user_id,
+        Enrollment.status.in_(["enrolled", "active"])
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found or cannot unenroll")
+    db.delete(enrollment)
+    db.commit()
+    return {"success": True}
+
 @app.get("/api/mentee/enrollments")
 def my_enrollments(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
     enrollments = db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id).all()
@@ -1158,11 +1198,28 @@ def my_enrollments(current_user: User = Depends(require_mentee), db: Session = D
     programs_map = {
         p.program_id: p for p in db.query(Program).filter(Program.program_id.in_(program_ids)).all()
     } if program_ids else {}
+    mentors_map = {m.mentor_profile_id: u.full_name
+                   for m, u in db.query(Mentor, User).join(User, Mentor.user_id == User.user_id).all()}
+    total_sessions_by_prog = {}
+    done_sessions_by_prog = {}
+    if program_ids:
+        for prog_id in program_ids:
+            total_sessions_by_prog[prog_id] = db.query(MentorSession).filter(
+                MentorSession.program_id == prog_id).count()
+            done_sessions_by_prog[prog_id] = db.query(SessionCompletion).filter(
+                SessionCompletion.user_id == current_user.user_id,
+                SessionCompletion.program_id == prog_id,
+                SessionCompletion.completed == True).count()
     return [
         {"enrollment_id": e.enrollment_id, "program_id": e.program_id,
          "program_title": programs_map[e.program_id].title if e.program_id in programs_map else e.program_id,
          "program_description": programs_map[e.program_id].description if e.program_id in programs_map else None,
-         "status": e.status, "enrollment_date": str(e.enrollment_date)}
+         "mentor_name": mentors_map.get(programs_map[e.program_id].assigned_mentor) if e.program_id in programs_map else None,
+         "status": e.status,
+         "progress": round(done_sessions_by_prog.get(e.program_id, 0) / total_sessions_by_prog[e.program_id] * 100)
+                     if total_sessions_by_prog.get(e.program_id) else 0,
+         "certificate_issued": e.status == "certificate_eligible",
+         "enrollment_date": str(e.enrollment_date)}
         for e in enrollments
     ]
 
@@ -1173,11 +1230,14 @@ def my_sessions(current_user: User = Depends(require_mentee), db: Session = Depe
     if not program_ids:
         return []
     sessions = db.query(MentorSession).filter(MentorSession.program_id.in_(program_ids)).all()
+    programs_map = {p.program_id: p.title for p in db.query(Program).filter(
+        Program.program_id.in_(program_ids)).all()}
     completions = {c.session_id for c in db.query(SessionCompletion).filter(
         SessionCompletion.user_id == current_user.user_id, SessionCompletion.completed == True).all()}
     return [
         {"session_id": s.session_id, "title": s.title, "description": s.description,
-         "program_id": s.program_id, "session_type": s.session_type,
+         "program_id": s.program_id, "program_title": programs_map.get(s.program_id),
+         "session_type": s.session_type,
          "scheduled_at": str(s.scheduled_at) if s.scheduled_at else None,
          "meeting_link": s.meeting_link, "video_url": s.video_url,
          "duration_minutes": s.duration_minutes, "status": s.status,
@@ -1192,9 +1252,17 @@ def my_attendance(current_user: User = Depends(require_mentee), db: Session = De
     sessions_map = {
         s.session_id: s for s in db.query(MentorSession).filter(MentorSession.session_id.in_(sids)).all()
     } if sids else {}
+    programs_map = {}
+    if sessions_map:
+        prog_ids = list({s.program_id for s in sessions_map.values()})
+        programs_map = {p.program_id: p.title for p in db.query(Program).filter(
+            Program.program_id.in_(prog_ids)).all()}
     return [
-        {"session_id": a.session_id,
+        {"attendance_id": a.attendance_id,
+         "session_id": a.session_id,
          "session_title": sessions_map[a.session_id].title if a.session_id in sessions_map else a.session_id,
+         "program_title": programs_map.get(sessions_map[a.session_id].program_id) if a.session_id in sessions_map else None,
+         "session_date": str(sessions_map[a.session_id].scheduled_at) if a.session_id in sessions_map and sessions_map[a.session_id].scheduled_at else str(a.marked_at) if a.marked_at else None,
          "status": a.status, "marked_at": str(a.marked_at) if a.marked_at else None,
          "total_minutes_present": a.total_minutes_present}
         for a in records
