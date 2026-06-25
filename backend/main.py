@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -224,6 +224,18 @@ class CreateSessionBody(BaseModel):
     video_url: Optional[str] = None
     duration_minutes: Optional[int] = None
 
+    @field_validator('mentor_id', 'description', 'scheduled_at', 'meeting_link', 'video_url', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        return None if v == '' else v
+
+    @field_validator('duration_minutes', mode='before')
+    @classmethod
+    def parse_duration(cls, v):
+        if v == '' or v is None:
+            return None
+        return int(v)
+
 class UpdateSessionBody(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -232,6 +244,18 @@ class UpdateSessionBody(BaseModel):
     video_url: Optional[str] = None
     duration_minutes: Optional[int] = None
     status: Optional[str] = None
+
+    @field_validator('description', 'scheduled_at', 'meeting_link', 'video_url', 'status', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        return None if v == '' else v
+
+    @field_validator('duration_minutes', mode='before')
+    @classmethod
+    def parse_duration(cls, v):
+        if v == '' or v is None:
+            return None
+        return int(v)
 
 class GenerateInviteBody(BaseModel):
     mentor_email: str
@@ -614,10 +638,16 @@ def admin_get_sessions(current_user: User = Depends(require_admin), db: Session 
 @app.post("/api/admin/sessions")
 def admin_create_session(body: CreateSessionBody, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     session_id = generate_session_id(db)
+    scheduled_at = None
+    if body.scheduled_at:
+        try:
+            scheduled_at = datetime.fromisoformat(body.scheduled_at)
+        except ValueError:
+            scheduled_at = None
     session = MentorSession(
         session_id=session_id, program_id=body.program_id, mentor_id=body.mentor_id,
         title=body.title, description=body.description, session_type=body.session_type,
-        scheduled_at=body.scheduled_at, meeting_link=body.meeting_link,
+        scheduled_at=scheduled_at, meeting_link=body.meeting_link,
         video_url=body.video_url, duration_minutes=body.duration_minutes, status="scheduled"
     )
     db.add(session)
@@ -661,7 +691,11 @@ def admin_update_session(session_id: str, body: UpdateSessionBody, current_user:
         raise HTTPException(status_code=404, detail="Session not found")
     if body.title: session.title = body.title
     if body.description: session.description = body.description
-    if body.scheduled_at: session.scheduled_at = body.scheduled_at
+    if body.scheduled_at:
+        try:
+            session.scheduled_at = datetime.fromisoformat(body.scheduled_at)
+        except ValueError:
+            pass
     if body.meeting_link: session.meeting_link = body.meeting_link
     if body.video_url: session.video_url = body.video_url
     if body.duration_minutes: session.duration_minutes = body.duration_minutes
@@ -864,10 +898,16 @@ def mentor_create_session(body: CreateSessionBody, current_user: User = Depends(
         raise HTTPException(status_code=403, detail="Not your program")
 
     session_id = generate_session_id(db)
+    scheduled_at = None
+    if body.scheduled_at:
+        try:
+            scheduled_at = datetime.fromisoformat(body.scheduled_at)
+        except ValueError:
+            scheduled_at = None
     session = MentorSession(
         session_id=session_id, program_id=body.program_id,
         mentor_id=mentor.mentor_profile_id, title=body.title, description=body.description,
-        session_type=body.session_type, scheduled_at=body.scheduled_at,
+        session_type=body.session_type, scheduled_at=scheduled_at,
         meeting_link=body.meeting_link, video_url=body.video_url,
         duration_minutes=body.duration_minutes, status="scheduled"
     )
@@ -914,7 +954,11 @@ def mentor_update_session(session_id: str, body: UpdateSessionBody,
         raise HTTPException(status_code=404, detail="Session not found")
     if body.title: session.title = body.title
     if body.description: session.description = body.description
-    if body.scheduled_at: session.scheduled_at = body.scheduled_at
+    if body.scheduled_at:
+        try:
+            session.scheduled_at = datetime.fromisoformat(body.scheduled_at)
+        except ValueError:
+            pass
     if body.meeting_link: session.meeting_link = body.meeting_link
     if body.video_url: session.video_url = body.video_url
     if body.duration_minutes: session.duration_minutes = body.duration_minutes
