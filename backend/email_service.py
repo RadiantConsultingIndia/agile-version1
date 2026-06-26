@@ -223,6 +223,35 @@ def enrollment_rejected_email(full_name: str, program_title: str) -> str:
     """
 
 
+def certificate_earned_email(full_name: str, program_title: str) -> str:
+    return f"""
+    <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
+      <div style="background:linear-gradient(135deg,#78350F,#D97706);padding:32px 36px;text-align:center;">
+        <div style="font-size:3rem;margin-bottom:8px;">🏆</div>
+        <div style="font-size:1.2rem;font-weight:800;color:white;">Agile<span style="color:#FDE68A;">Mentor</span></div>
+      </div>
+      <div style="padding:36px;">
+        <div style="display:inline-block;padding:4px 12px;background:#FEF3C7;color:#92400E;font-size:0.75rem;font-weight:700;border-radius:20px;margin-bottom:16px;">
+          🎓 CERTIFICATE READY
+        </div>
+        <h2 style="font-size:1.3rem;font-weight:700;color:#0F2645;margin-bottom:8px;">Congratulations, {full_name}!</h2>
+        <p style="font-size:0.9rem;color:#64748B;margin-bottom:20px;line-height:1.6;">
+          You've completed all sessions in <strong>{program_title}</strong> and your certificate is now ready.
+        </p>
+        <div style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:1px solid #FDE68A;border-radius:12px;padding:18px 20px;margin-bottom:24px;text-align:center;">
+          <div style="font-size:1rem;font-weight:700;color:#92400E;margin-bottom:4px;">📚 {program_title}</div>
+          <div style="font-size:0.82rem;color:#B45309;">Program Completion Certificate</div>
+        </div>
+        <p style="font-size:0.82rem;color:#64748B;margin-bottom:20px;">
+          Log in to your dashboard to download your certificate and share it on LinkedIn.
+        </p>
+        <hr style="border:none;border-top:1px solid #E2E8F4;margin:24px 0;"/>
+        <p style="font-size:0.75rem;color:#CBD5E1;">© 2026 AgileMentor. All rights reserved.</p>
+      </div>
+    </div>
+    """
+
+
 def otp_verification_email(full_name: str, otp_code: str) -> str:
     return f"""
     <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">

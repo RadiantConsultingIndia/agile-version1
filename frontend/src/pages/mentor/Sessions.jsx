@@ -2,10 +2,131 @@ import { useEffect, useState } from 'react'
 import MentorLayout from '../../components/layouts/MentorLayout'
 import api from '../../api/client'
 
+function StarDisplay({ rating, size = 14 }) {
+  return (
+    <span>
+      {[1,2,3,4,5].map(i => (
+        <span key={i} style={{ fontSize: size, color: i <= Math.round(rating) ? '#f59e0b' : '#e2e8f0' }}>★</span>
+      ))}
+    </span>
+  )
+}
+
+function RatingsPanel({ sessionId }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get(`/api/mentor/sessions/${sessionId}/ratings`)
+      .then(r => setData(r.data))
+      .catch(() => setData({ avg_rating: null, count: 0, ratings: [] }))
+      .finally(() => setLoading(false))
+  }, [sessionId])
+
+  if (loading) return <div style={{ padding: '14px 20px', fontSize: 13, color: '#94a3b8' }}>Loading ratings…</div>
+  if (!data || data.count === 0) return (
+    <div style={{ padding: '20px 20px', textAlign: 'center' }}>
+      <div style={{ fontSize: 32, marginBottom: 8 }}>⭐</div>
+      <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No ratings yet for this session.</p>
+    </div>
+  )
+
+  return (
+    <div style={{ padding: '16px 20px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
+      {/* Aggregate */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, padding: '14px 16px', background: '#fff', borderRadius: 12, border: '1px solid #f1f5f9' }}>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 32, fontWeight: 900, color: '#f59e0b', margin: 0, lineHeight: 1 }}>{data.avg_rating}</p>
+          <p style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0 0' }}>out of 5</p>
+        </div>
+        <div>
+          <StarDisplay rating={data.avg_rating} size={18} />
+          <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0', fontWeight: 600 }}>{data.count} rating{data.count !== 1 ? 's' : ''}</p>
+        </div>
+      </div>
+      {/* Individual comments */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {data.ratings.map((r, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '12px 14px', border: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: r.comments ? 6 : 0 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#4f46e5,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+                {r.mentee_name[0]}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', flex: 1 }}>{r.mentee_name}</span>
+              <StarDisplay rating={r.rating} size={13} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b' }}>{r.rating}/5</span>
+            </div>
+            {r.comments && <p style={{ fontSize: 12, color: '#64748b', margin: 0, lineHeight: 1.6, fontStyle: 'italic', paddingLeft: 36 }}>"{r.comments}"</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const emptyForm = { title: '', description: '', session_type: 'live', scheduled_at: '', meeting_link: '', video_url: '', duration_minutes: '' }
 
 const inp = { width: '100%', padding: '11px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 13, color: '#1e293b', outline: 'none', background: '#fafafa', boxSizing: 'border-box', fontFamily: 'inherit' }
 const label = { display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, letterSpacing: '0.02em' }
+
+function SessionCard({ s, isLive, isPast, onEdit, onDelete }) {
+  const [showRatings, setShowRatings] = useState(false)
+  const hasRatings = s.rating_count > 0
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #f1f5f9', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+      <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: isLive ? '#eff6ff' : '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+          {isLive ? '🎥' : '📹'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</p>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 50, flexShrink: 0, background: isLive ? '#dbeafe' : '#ede9fe', color: isLive ? '#1d4ed8' : '#6d28d9' }}>
+              {isLive ? 'Live' : 'Recorded'}
+            </span>
+            {isPast && <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 50, background: '#f1f5f9', color: '#94a3b8', flexShrink: 0 }}>Past</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
+              {s.scheduled_at ? new Date(s.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Recorded session'}
+              {s.duration_minutes ? ` · ${s.duration_minutes} min` : ''}
+            </p>
+            {/* Avg rating badge */}
+            {hasRatings && (
+              <button onClick={() => setShowRatings(o => !o)}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 50, border: '1px solid #fde68a', background: '#fffbeb', cursor: 'pointer' }}>
+                <span style={{ fontSize: 12 }}>⭐</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>{s.avg_rating} · {s.rating_count} review{s.rating_count !== 1 ? 's' : ''}</span>
+                <svg width="10" height="10" fill="none" stroke="#92400e" strokeWidth="2.5" viewBox="0 0 24 24"
+                  style={{ transform: showRatings ? 'rotate(180deg)' : 'rotate(0)', transition: '0.2s' }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {s.meeting_link && (
+            <a href={s.meeting_link} target="_blank" rel="noreferrer"
+              style={{ textDecoration: 'none', fontSize: 12, fontWeight: 700, color: '#fff', padding: '8px 16px', borderRadius: 8, background: '#4f46e5' }}>
+              Join
+            </a>
+          )}
+          <button onClick={() => onEdit(s)}
+            style={{ fontSize: 12, fontWeight: 600, color: '#64748b', padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer' }}>
+            Edit
+          </button>
+          <button onClick={() => onDelete(s.session_id)}
+            style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', padding: '8px 14px', borderRadius: 8, border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer' }}>
+            Delete
+          </button>
+        </div>
+      </div>
+      {showRatings && <RatingsPanel sessionId={s.session_id} />}
+    </div>
+  )
+}
 
 export default function MentorSessions() {
   const [sessions, setSessions] = useState([])
@@ -189,41 +310,7 @@ export default function MentorSessions() {
             const isLive = s.session_type === 'live'
             const isPast = s.scheduled_at && new Date(s.scheduled_at) < new Date()
             return (
-              <div key={s.session_id}
-                style={{ background: '#fff', borderRadius: 14, border: '1px solid #f1f5f9', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: isLive ? '#eff6ff' : '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
-                  {isLive ? '🎥' : '📹'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</p>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 50, flexShrink: 0, background: isLive ? '#dbeafe' : '#ede9fe', color: isLive ? '#1d4ed8' : '#6d28d9' }}>
-                      {isLive ? 'Live' : 'Recorded'}
-                    </span>
-                    {isPast && <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 50, background: '#f1f5f9', color: '#94a3b8', flexShrink: 0 }}>Past</span>}
-                  </div>
-                  <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
-                    {s.scheduled_at ? new Date(s.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Recorded session'}
-                    {s.duration_minutes ? ` · ${s.duration_minutes} min` : ''}
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  {s.meeting_link && (
-                    <a href={s.meeting_link} target="_blank" rel="noreferrer"
-                      style={{ textDecoration: 'none', fontSize: 12, fontWeight: 700, color: '#fff', padding: '8px 16px', borderRadius: 8, background: '#4f46e5' }}>
-                      Join
-                    </a>
-                  )}
-                  <button onClick={() => openEdit(s)}
-                    style={{ fontSize: 12, fontWeight: 600, color: '#64748b', padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer' }}>
-                    Edit
-                  </button>
-                  <button onClick={() => handleDelete(s.session_id)}
-                    style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', padding: '8px 14px', borderRadius: 8, border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer' }}>
-                    Delete
-                  </button>
-                </div>
-              </div>
+              <SessionCard key={s.session_id} s={s} isLive={isLive} isPast={isPast} onEdit={openEdit} onDelete={handleDelete} />
             )
           })}
         </div>

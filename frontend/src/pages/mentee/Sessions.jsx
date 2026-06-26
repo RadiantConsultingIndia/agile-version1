@@ -10,6 +10,84 @@ const getYTVideoId = url => {
   return m ? m[1] : null
 }
 
+// ─── Star Rating Widget ───────────────────────────────────────────────────────
+function StarRatingWidget({ sessionId, initial, onSubmitted }) {
+  const [mode,     setMode]     = useState(initial ? 'view' : 'rate')
+  const [hovered,  setHovered]  = useState(0)
+  const [selected, setSelected] = useState(initial?.rating ?? 0)
+  const [comments, setComments] = useState(initial?.comments ?? '')
+  const [saving,   setSaving]   = useState(false)
+
+  const submit = async () => {
+    if (!selected) return
+    setSaving(true)
+    try {
+      await api.post(`/api/mentee/sessions/${sessionId}/rate`, { rating: selected, comments })
+      setMode('view')
+      onSubmitted?.({ rating: selected, comments })
+    } catch (e) { alert(e.response?.data?.detail || 'Failed to submit') }
+    finally { setSaving(false) }
+  }
+
+  const STARS = [1, 2, 3, 4, 5]
+  const display = mode === 'view' ? selected : (hovered || selected)
+
+  if (mode === 'view') {
+    return (
+      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 2 }}>
+            {STARS.map(i => <span key={i} style={{ fontSize: 16, color: i <= selected ? '#f59e0b' : '#e2e8f0' }}>★</span>)}
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b' }}>{selected}/5</span>
+          <button onClick={() => setMode('rate')}
+            style={{ marginLeft: 'auto', fontSize: 11, color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, padding: 0 }}>
+            Edit
+          </button>
+        </div>
+        {comments && <p style={{ fontSize: 12, color: '#64748b', margin: '5px 0 0', lineHeight: 1.5, fontStyle: 'italic' }}>"{comments}"</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', margin: '0 0 7px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Rate this session</p>
+      <div style={{ display: 'flex', gap: 3, marginBottom: 8 }}>
+        {STARS.map(i => (
+          <button key={i} onClick={() => setSelected(i)}
+            onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(0)}
+            style={{ fontSize: 22, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', lineHeight: 1,
+                     color: i <= display ? '#f59e0b' : '#e2e8f0',
+                     transform: i <= display ? 'scale(1.15)' : 'scale(1)', transition: 'color 0.1s, transform 0.12s' }}>
+            ★
+          </button>
+        ))}
+        {selected > 0 && <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center', marginLeft: 4 }}>
+          {['','Awful','Poor','Okay','Good','Excellent'][selected]}
+        </span>}
+      </div>
+      {selected > 0 && (
+        <>
+          <textarea placeholder="Share your thoughts… (optional)"
+            value={comments} onChange={e => setComments(e.target.value)}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #e2e8f0',
+                     fontSize: 12, color: '#1e293b', outline: 'none', resize: 'none', minHeight: 56,
+                     fontFamily: 'inherit', boxSizing: 'border-box', marginBottom: 8 }}
+            onFocus={e => e.target.style.borderColor = '#7c3aed'}
+            onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+          <button onClick={submit} disabled={saving}
+            style={{ width: '100%', padding: '8px 0', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700,
+                     color: '#fff', background: saving ? '#c4b5fd' : 'linear-gradient(135deg,#7c3aed,#a855f7)',
+                     cursor: saving ? 'not-allowed' : 'pointer', boxShadow: saving ? 'none' : '0 2px 8px rgba(124,58,237,0.3)' }}>
+            {saving ? 'Submitting…' : '⭐ Submit Rating'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Video Modal ──────────────────────────────────────────────────────────────
 function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
   const videoRef       = useRef(null)
@@ -263,8 +341,10 @@ export default function MenteeSessions() {
   const [joining,    setJoining]    = useState(null)
   const [progress,   setProgress]   = useState({})   // session_id → {percent, is_complete}
   const [watchModal, setWatchModal] = useState(null)  // session object
+  const [myRatings,  setMyRatings]  = useState({})   // session_id → {rating, comments}
 
   useEffect(() => {
+    api.get('/api/mentee/sessions/ratings').then(r => setMyRatings(r.data)).catch(() => {})
     api.get('/api/mentee/sessions').then(r => {
       const data = r.data
       setSessions(data)
@@ -400,6 +480,14 @@ export default function MenteeSessions() {
                            : 'linear-gradient(135deg,#6d28d9,#7c3aed)' }}>
                 {isDone ? '▶ Rewatch' : pct > 0 ? `▶ Continue (${pct.toFixed(0)}%)` : '▶ Watch Now'}
               </button>
+            )}
+            {/* Show rating widget for any completed session */}
+            {isDone && (
+              <StarRatingWidget
+                sessionId={s.session_id}
+                initial={myRatings[s.session_id] ?? null}
+                onSubmitted={data => setMyRatings(prev => ({ ...prev, [s.session_id]: data }))}
+              />
             )}
           </>
         )}

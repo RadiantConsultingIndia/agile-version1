@@ -36,6 +36,7 @@ from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
     enrollment_request_admin_email, enrollment_approved_email, enrollment_rejected_email,
+    certificate_earned_email,
 )
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -128,6 +129,10 @@ def generate_progress_id(db) -> str:
 def generate_completion_id(db) -> str:
     count = db.query(SessionCompletion).count() + 1
     return f"SC{count:04d}"
+
+def generate_feedback_id(db) -> str:
+    count = db.query(Feedback).count() + 1
+    return f"FB{count:04d}"
 
 
 # ── AUTH HELPER ───────────────────────────────────────────────────────────────
@@ -270,6 +275,9 @@ class VideoSegmentBody(BaseModel):
     end: float
     video_duration_seconds: float = 0
 
+class FeedbackBody(BaseModel):
+    rating: int
+    comments: str = ""
 
 # ── SESSION REMINDER (APScheduler) ────────────────────────────────────────────
 
@@ -875,12 +883,21 @@ def mentor_get_sessions(current_user: User = Depends(require_mentor), db: Sessio
     sessions = db.query(MentorSession).filter(MentorSession.mentor_id == mentor.mentor_profile_id).all()
     programs = {p.program_id: p.title for p in db.query(Program).filter(
         Program.assigned_mentor == mentor.mentor_profile_id).all()}
+    session_ids = [s.session_id for s in sessions]
+    all_fb = db.query(Feedback).filter(Feedback.session_id.in_(session_ids)).all() if session_ids else []
+    fb_map = {}
+    for f in all_fb:
+        fb_map.setdefault(f.session_id, []).append(f.rating)
+    def avg_r(sid):
+        ratings = fb_map.get(sid, [])
+        return round(sum(ratings) / len(ratings), 1) if ratings else None
     return [{"session_id": s.session_id, "title": s.title, "description": s.description,
              "program_id": s.program_id, "program_title": programs.get(s.program_id),
              "session_type": s.session_type,
              "scheduled_at": str(s.scheduled_at) if s.scheduled_at else None,
              "meeting_link": s.meeting_link, "video_url": s.video_url,
-             "duration_minutes": s.duration_minutes, "status": s.status} for s in sessions]
+             "duration_minutes": s.duration_minutes, "status": s.status,
+             "avg_rating": avg_r(s.session_id), "rating_count": len(fb_map.get(s.session_id, []))} for s in sessions]
 
 @app.get("/api/mentor/programs")
 def mentor_get_programs(current_user: User = Depends(require_mentor), db: Session = Depends(get_db)):
@@ -1323,6 +1340,11 @@ def admin_grant_certificate(enrollment_id: str, current_user: User = Depends(req
         raise HTTPException(status_code=404, detail="Enrollment not found")
     enrollment.status = "certificate_eligible"
     db.commit()
+    cert_user = db.query(User).filter(User.user_id == enrollment.user_id).first()
+    cert_prog = db.query(Program).filter(Program.program_id == enrollment.program_id).first()
+    if cert_user and cert_prog:
+        html = certificate_earned_email(cert_user.full_name, cert_prog.title)
+        threading.Thread(target=send_email, args=(cert_user.email, f"🏆 Certificate Ready: {cert_prog.title}", html)).start()
     return {"success": True}
 
 @app.get("/api/mentor/enrollment-requests")
@@ -1470,6 +1492,11 @@ def _check_certificate_eligibility(user_id: str, program_id: str, db):
         if enrollment:
             enrollment.status = "certificate_eligible"
             db.commit()
+            cert_user = db.query(User).filter(User.user_id == user_id).first()
+            cert_prog = db.query(Program).filter(Program.program_id == program_id).first()
+            if cert_user and cert_prog:
+                html = certificate_earned_email(cert_user.full_name, cert_prog.title)
+                threading.Thread(target=send_email, args=(cert_user.email, f"🏆 Certificate Ready: {cert_prog.title}", html)).start()
 
 def _sync_attendance_completion(session_id: str, user_id: str, program_id: str, db):
     """When a mentee is marked present, ensure a SessionCompletion exists and check certificate."""
@@ -1643,4 +1670,62 @@ def get_video_progress(session_id: str, current_user: User = Depends(require_use
         "duration_seconds": duration_seconds,
         "percent": round((total_watched / duration_seconds * 100) if duration_seconds else 0, 1),
         "is_complete": completion.completed if completion else False,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SESSION RATINGS & FEEDBACK
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/mentee/sessions/{session_id}/rate")
+def rate_session(session_id: str, body: FeedbackBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    completion = db.query(SessionCompletion).filter(
+        SessionCompletion.session_id == session_id,
+        SessionCompletion.user_id == current_user.user_id
+    ).first()
+    if not completion:
+        raise HTTPException(status_code=403, detail="Complete this session before rating it")
+    existing = db.query(Feedback).filter(
+        Feedback.session_id == session_id,
+        Feedback.mentee_user_id == current_user.user_id
+    ).first()
+    if existing:
+        existing.rating = body.rating
+        existing.comments = body.comments
+    else:
+        fb = Feedback(
+            feedback_id=generate_feedback_id(db),
+            session_id=session_id,
+            mentee_user_id=current_user.user_id,
+            rating=body.rating,
+            comments=body.comments,
+        )
+        db.add(fb)
+    db.commit()
+    all_fb = db.query(Feedback).filter(Feedback.session_id == session_id).all()
+    avg = round(sum(f.rating for f in all_fb) / len(all_fb), 1) if all_fb else None
+    return {"success": True, "avg_rating": avg, "rating_count": len(all_fb)}
+
+@app.get("/api/mentee/sessions/ratings")
+def mentee_my_ratings(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    ratings = db.query(Feedback).filter(Feedback.mentee_user_id == current_user.user_id).all()
+    return {r.session_id: {"rating": r.rating, "comments": r.comments} for r in ratings}
+
+@app.get("/api/mentor/sessions/{session_id}/ratings")
+def mentor_session_ratings(session_id: str, current_user: User = Depends(require_mentor), db: Session = Depends(get_db)):
+    ratings = db.query(Feedback).filter(Feedback.session_id == session_id).all()
+    if not ratings:
+        return {"avg_rating": None, "count": 0, "ratings": []}
+    mentee_ids = [r.mentee_user_id for r in ratings]
+    users = {u.user_id: u.full_name for u in db.query(User).filter(User.user_id.in_(mentee_ids)).all()}
+    avg = round(sum(r.rating for r in ratings) / len(ratings), 1)
+    return {
+        "avg_rating": avg,
+        "count": len(ratings),
+        "ratings": [
+            {"mentee_name": users.get(r.mentee_user_id, "Anonymous"), "rating": r.rating, "comments": r.comments}
+            for r in ratings
+        ],
     }
