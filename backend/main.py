@@ -1309,6 +1309,15 @@ def admin_reject_enrollment(enrollment_id: str, current_user: User = Depends(req
         threading.Thread(target=send_email, args=(mentee.email, f"Enrollment Update: {program.title}", html)).start()
     return {"success": True}
 
+@app.post("/api/admin/enrollments/{enrollment_id}/grant-certificate")
+def admin_grant_certificate(enrollment_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    enrollment = db.query(Enrollment).filter(Enrollment.enrollment_id == enrollment_id).first()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    enrollment.status = "certificate_eligible"
+    db.commit()
+    return {"success": True}
+
 @app.get("/api/mentor/enrollment-requests")
 def mentor_get_enrollment_requests(current_user: User = Depends(require_mentor), db: Session = Depends(get_db)):
     mentor = db.query(Mentor).filter(Mentor.user_id == current_user.user_id).first()
@@ -1431,6 +1440,26 @@ def my_resources(current_user: User = Depends(require_mentee), db: Session = Dep
 # SESSION JOIN / LEAVE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _check_certificate_eligibility(user_id: str, program_id: str, db):
+    """Mark enrollment certificate_eligible when all sessions in the program are completed."""
+    all_sessions = db.query(MentorSession).filter(MentorSession.program_id == program_id).all()
+    if not all_sessions:
+        return
+    completed_ids = {c.session_id for c in db.query(SessionCompletion).filter(
+        SessionCompletion.user_id == user_id,
+        SessionCompletion.program_id == program_id,
+        SessionCompletion.completed == True
+    ).all()}
+    if all(s.session_id in completed_ids for s in all_sessions):
+        enrollment = db.query(Enrollment).filter(
+            Enrollment.user_id == user_id,
+            Enrollment.program_id == program_id,
+            Enrollment.status.in_(["enrolled", "active"])
+        ).first()
+        if enrollment:
+            enrollment.status = "certificate_eligible"
+            db.commit()
+
 @app.post("/api/session/{session_id}/join")
 def join_session(session_id: str, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
     session = db.query(MentorSession).filter(MentorSession.session_id == session_id).first()
@@ -1496,6 +1525,22 @@ def leave_session(session_id: str, current_user: User = Depends(require_mentee),
     attendance.join_intervals = json.dumps(intervals)
     attendance.total_minutes_present = total_minutes
     db.commit()
+
+    # Auto-mark present → create SessionCompletion and check certificate eligibility
+    if attendance.status == "present":
+        already_complete = db.query(SessionCompletion).filter(
+            SessionCompletion.user_id == current_user.user_id,
+            SessionCompletion.session_id == session_id
+        ).first()
+        if not already_complete:
+            completion = SessionCompletion(
+                completion_id=generate_completion_id(db), user_id=current_user.user_id,
+                session_id=session_id, program_id=session.program_id, completed=True
+            )
+            db.add(completion)
+            db.commit()
+            _check_certificate_eligibility(current_user.user_id, session.program_id, db)
+
     return {"success": True, "total_minutes": total_minutes, "status": attendance.status}
 
 
@@ -1556,18 +1601,7 @@ def update_video_progress(payload: VideoSegmentBody, current_user: User = Depend
         db.add(completion)
         db.commit()
 
-        all_recorded = db.query(MentorSession).filter(
-            MentorSession.program_id == session.program_id,
-            MentorSession.session_type == "recorded"
-        ).all()
-        completed_ids = {c.session_id for c in db.query(SessionCompletion).filter(
-            SessionCompletion.user_id == current_user.user_id,
-            SessionCompletion.program_id == session.program_id,
-            SessionCompletion.completed == True
-        ).all()}
-        if all(s.session_id in completed_ids for s in all_recorded):
-            enrollment.status = "certificate_eligible"
-            db.commit()
+        _check_certificate_eligibility(current_user.user_id, session.program_id, db)
 
     return {
         "total_watched": merged_seconds,
