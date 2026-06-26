@@ -12,16 +12,42 @@ const toYTEmbed = url => {
 
 // ─── Video Modal ──────────────────────────────────────────────────────────────
 function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
-  const videoRef      = useRef(null)
-  const ytRef         = useRef(null)
-  const segStart      = useRef(null)
-  const pollTimer     = useRef(null)
-  const videoDurRef   = useRef(0)  // actual duration in seconds from the player
+  const videoRef       = useRef(null)
+  const ytRef          = useRef(null)
+  const segStart       = useRef(null)
+  const flushTimer     = useRef(null)
+  const localTimer     = useRef(null)
+  const videoDurRef    = useRef(0)
+  const localSecsRef   = useRef(0)
 
-  const [liveProgress, setLiveProgress] = useState(initialProgress ?? { percent: 0, is_complete: false, total_watched: 0 })
+  // displayPct updates every second via local timer — no server roundtrip needed
+  const [displayPct,  setDisplayPct]  = useState(initialProgress?.percent ?? 0)
+  const [isComplete,  setIsComplete]  = useState(initialProgress?.is_complete ?? false)
+  const serverTotal = useRef(initialProgress?.total_watched ?? 0)
 
   const isYT     = isYouTube(session.video_url)
   const embedUrl = isYT ? toYTEmbed(session.video_url) : null
+
+  // Recompute display percent using local seconds + server total_watched
+  const refreshDisplay = useCallback(() => {
+    const dur = videoDurRef.current
+    if (dur > 0) {
+      const pct = Math.min(100, ((serverTotal.current + localSecsRef.current) / dur) * 100)
+      setDisplayPct(pct)
+    }
+  }, [])
+
+  const startLocalTimer = useCallback(() => {
+    clearInterval(localTimer.current)
+    localTimer.current = setInterval(() => {
+      localSecsRef.current += 1
+      refreshDisplay()
+    }, 1000)
+  }, [refreshDisplay])
+
+  const stopLocalTimer = useCallback(() => {
+    clearInterval(localTimer.current)
+  }, [])
 
   const sendSegment = useCallback(async (start, end) => {
     if (end == null || start == null || end <= start + 0.5) return
@@ -32,30 +58,42 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
         end:   Math.round(end),
         video_duration_seconds: videoDurRef.current
       })
-      setLiveProgress(r.data)
+      serverTotal.current = r.data.total_watched ?? serverTotal.current
+      localSecsRef.current = 0   // reset local counter — server now knows the real total
+      if (r.data.is_complete) setIsComplete(true)
+      // Update the card's progress bar via parent state
       onProgressUpdate(session.session_id, r.data)
-    } catch { /* silent */ }
-  }, [session.session_id, onProgressUpdate])
+      refreshDisplay()
+    } catch (err) {
+      console.error('Video progress save failed:', err?.response?.data ?? err.message)
+    }
+  }, [session.session_id, onProgressUpdate, refreshDisplay])
 
   // ── HTML5 video handlers ─────────────────────────────────────────────────
-  const onLoadedMetadata = () => { videoDurRef.current = videoRef.current?.duration ?? 0 }
-  const onPlay    = () => { segStart.current = videoRef.current?.currentTime ?? 0 }
-  const onPause   = () => {
+  const onLoadedMetadata = useCallback(() => {
+    videoDurRef.current = videoRef.current?.duration ?? 0
+    refreshDisplay()
+  }, [refreshDisplay])
+
+  const onPlay = useCallback(() => {
+    segStart.current = videoRef.current?.currentTime ?? 0
+    startLocalTimer()
+    // Flush every 10 s while playing
+    flushTimer.current = setInterval(() => {
+      const cur = videoRef.current?.currentTime ?? 0
+      if (segStart.current !== null) {
+        sendSegment(segStart.current, cur)
+        segStart.current = cur
+      }
+    }, 10000)
+  }, [startLocalTimer, sendSegment])
+
+  const onPauseOrEnd = useCallback(() => {
+    stopLocalTimer()
+    clearInterval(flushTimer.current)
     const cur = videoRef.current?.currentTime ?? 0
     if (segStart.current !== null) { sendSegment(segStart.current, cur); segStart.current = null }
-  }
-  const onEnded   = () => {
-    const cur = videoRef.current?.currentTime ?? 0
-    if (segStart.current !== null) { sendSegment(segStart.current, cur); segStart.current = null }
-  }
-  const onTimeUpdate = () => {
-    const cur = videoRef.current?.currentTime ?? 0
-    // Flush segment every 15 s of continuous watching to avoid data loss on tab close
-    if (segStart.current !== null && cur - segStart.current >= 15) {
-      sendSegment(segStart.current, cur)
-      segStart.current = cur
-    }
-  }
+  }, [stopLocalTimer, sendSegment])
 
   // ── YouTube IFrame API ───────────────────────────────────────────────────
   useEffect(() => {
@@ -66,21 +104,27 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
         events: {
           onReady: () => {
             videoDurRef.current = ytRef.current.getDuration() || 0
+            refreshDisplay()
           },
           onStateChange: e => {
             const S = window.YT.PlayerState
             if (e.data === S.PLAYING) {
+              if (!videoDurRef.current) {
+                videoDurRef.current = ytRef.current.getDuration() || 0
+                refreshDisplay()
+              }
               segStart.current = ytRef.current.getCurrentTime()
-              if (!videoDurRef.current) videoDurRef.current = ytRef.current.getDuration() || 0
-              pollTimer.current = setInterval(() => {
+              startLocalTimer()
+              flushTimer.current = setInterval(() => {
                 const cur = ytRef.current?.getCurrentTime?.() ?? 0
                 if (segStart.current !== null) {
                   sendSegment(segStart.current, cur)
                   segStart.current = cur
                 }
-              }, 15000)
+              }, 10000)
             } else if (e.data === S.PAUSED || e.data === S.ENDED) {
-              clearInterval(pollTimer.current)
+              clearInterval(flushTimer.current)
+              stopLocalTimer()
               const cur = ytRef.current?.getCurrentTime?.() ?? 0
               if (segStart.current !== null) { sendSegment(segStart.current, cur); segStart.current = null }
             }
@@ -103,23 +147,25 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
     }
 
     return () => {
-      clearInterval(pollTimer.current)
+      clearInterval(flushTimer.current)
+      clearInterval(localTimer.current)
       const cur = ytRef.current?.getCurrentTime?.() ?? 0
       if (segStart.current !== null && cur > segStart.current) sendSegment(segStart.current, cur)
     }
-  }, [isYT, sendSegment])
+  }, [isYT, sendSegment, startLocalTimer, stopLocalTimer, refreshDisplay])
 
-  // Flush segment on modal close for direct video
+  // Cleanup for direct video on modal close
   useEffect(() => {
     if (isYT) return
     return () => {
+      clearInterval(flushTimer.current)
+      clearInterval(localTimer.current)
       const cur = videoRef.current?.currentTime ?? 0
       if (segStart.current !== null && cur > segStart.current) sendSegment(segStart.current, cur)
     }
   }, [isYT, sendSegment])
 
-  const pct        = liveProgress?.percent ?? 0
-  const isComplete = liveProgress?.is_complete ?? false
+  const pctDisplay = displayPct >= 1 ? Math.round(displayPct) : displayPct > 0 ? displayPct.toFixed(1) : 0
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 1000,
@@ -161,7 +207,7 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
             <video ref={videoRef} src={session.video_url} controls
               style={{ width: '100%', height: '100%' }}
               onLoadedMetadata={onLoadedMetadata}
-              onPlay={onPlay} onPause={onPause} onEnded={onEnded} onTimeUpdate={onTimeUpdate} />
+              onPlay={onPlay} onPause={onPauseOrEnd} onEnded={onPauseOrEnd} />
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
                           height: '100%', color: '#94a3b8', fontSize: 14 }}>
@@ -174,12 +220,13 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
         <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
             <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Watch progress</span>
-            <span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 700 }}>{pct.toFixed(0)}%</span>
+            <span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 700 }}>{pctDisplay}%</span>
           </div>
           <div style={{ height: 6, borderRadius: 99, background: '#f1f5f9', overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 99, width: `${pct}%`,
+            <div style={{ height: '100%', borderRadius: 99,
+                          width: `${Math.max(displayPct > 0 ? 1.5 : 0, displayPct)}%`,
                           background: isComplete ? '#16a34a' : 'linear-gradient(90deg,#7c3aed,#a855f7)',
-                          transition: 'width 0.4s ease' }} />
+                          transition: 'width 1s linear' }} />
           </div>
           <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>
             {isComplete
