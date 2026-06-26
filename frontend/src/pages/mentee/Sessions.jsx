@@ -5,9 +5,9 @@ import api from '../../api/client'
 // ─── URL helpers ─────────────────────────────────────────────────────────────
 const isYouTube = url => /youtube\.com|youtu\.be/.test(url || '')
 
-const toYTEmbed = url => {
+const getYTVideoId = url => {
   const m = (url || '').match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
-  return m ? `https://www.youtube.com/embed/${m[1]}?enablejsapi=1&origin=${window.location.origin}` : null
+  return m ? m[1] : null
 }
 
 // ─── Video Modal ──────────────────────────────────────────────────────────────
@@ -25,8 +25,8 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
   const [isComplete,  setIsComplete]  = useState(initialProgress?.is_complete ?? false)
   const serverTotal = useRef(initialProgress?.total_watched ?? 0)
 
-  const isYT     = isYouTube(session.video_url)
-  const embedUrl = isYT ? toYTEmbed(session.video_url) : null
+  const isYT      = isYouTube(session.video_url)
+  const ytVideoId = isYT ? getYTVideoId(session.video_url) : null
 
   // Recompute display percent using local seconds + server total_watched
   const refreshDisplay = useCallback(() => {
@@ -100,7 +100,11 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
     if (!isYT) return
 
     const setupPlayer = () => {
-      ytRef.current = new window.YT.Player('yt-embed', {
+      ytRef.current = new window.YT.Player('yt-container', {
+        videoId: ytVideoId,
+        playerVars: { controls: 1, rel: 0, modestbranding: 1 },
+        width: '100%',
+        height: '100%',
         events: {
           onReady: () => {
             videoDurRef.current = ytRef.current.getDuration() || 0
@@ -198,12 +202,9 @@ function VideoModal({ session, initialProgress, onClose, onProgressUpdate }) {
 
         {/* Player */}
         <div style={{ aspectRatio: '16/9', background: '#000' }}>
-          {isYT && embedUrl ? (
-            <iframe id="yt-embed" src={embedUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen />
-          ) : session.video_url ? (
+          {isYT && ytVideoId ? (
+            <div id="yt-container" style={{ width: '100%', height: '100%' }} />
+          ) : !isYT && session.video_url ? (
             <video ref={videoRef} src={session.video_url} controls
               style={{ width: '100%', height: '100%' }}
               onLoadedMetadata={onLoadedMetadata}
