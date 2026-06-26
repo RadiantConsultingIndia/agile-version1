@@ -739,6 +739,7 @@ def admin_get_attendance(session_id: str, current_user: User = Depends(require_a
 @app.post("/api/admin/attendance/{session_id}/mark")
 def admin_mark_attendance(session_id: str, body: MarkAttendanceBody,
                           current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    session = db.query(MentorSession).filter(MentorSession.session_id == session_id).first()
     existing = db.query(Attendance).filter(
         Attendance.session_id == session_id, Attendance.user_id == body.user_id).first()
     if existing:
@@ -749,6 +750,8 @@ def admin_mark_attendance(session_id: str, body: MarkAttendanceBody,
             session_id=session_id, user_id=body.user_id, status=body.status
         ))
     db.commit()
+    if body.status == "present" and session:
+        _sync_attendance_completion(session_id, body.user_id, session.program_id, db)
     return {"success": True}
 
 # ── ADMIN: Resources ──────────────────────────────────────────────────────────
@@ -1119,6 +1122,7 @@ def mentor_get_attendance(session_id: str, current_user: User = Depends(require_
 @app.post("/api/mentor/attendance/{session_id}/mark")
 def mentor_mark_attendance(session_id: str, body: MarkAttendanceBody,
                             current_user: User = Depends(require_mentor), db: Session = Depends(get_db)):
+    session = db.query(MentorSession).filter(MentorSession.session_id == session_id).first()
     existing = db.query(Attendance).filter(
         Attendance.session_id == session_id, Attendance.user_id == body.user_id).first()
     if existing:
@@ -1129,6 +1133,8 @@ def mentor_mark_attendance(session_id: str, body: MarkAttendanceBody,
             session_id=session_id, user_id=body.user_id, status=body.status
         ))
     db.commit()
+    if body.status == "present" and session:
+        _sync_attendance_completion(session_id, body.user_id, session.program_id, db)
     return {"success": True}
 
 
@@ -1441,16 +1447,20 @@ def my_resources(current_user: User = Depends(require_mentee), db: Session = Dep
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _check_certificate_eligibility(user_id: str, program_id: str, db):
-    """Mark enrollment certificate_eligible when all sessions in the program are completed."""
-    all_sessions = db.query(MentorSession).filter(MentorSession.program_id == program_id).all()
-    if not all_sessions:
+    """Mark enrollment certificate_eligible when all trackable sessions in the program are completed.
+    Sessions with no duration_minutes set are excluded (they cannot be tracked)."""
+    trackable = db.query(MentorSession).filter(
+        MentorSession.program_id == program_id,
+        MentorSession.duration_minutes > 0
+    ).all()
+    if not trackable:
         return
     completed_ids = {c.session_id for c in db.query(SessionCompletion).filter(
         SessionCompletion.user_id == user_id,
         SessionCompletion.program_id == program_id,
         SessionCompletion.completed == True
     ).all()}
-    if all(s.session_id in completed_ids for s in all_sessions):
+    if all(s.session_id in completed_ids for s in trackable):
         enrollment = db.query(Enrollment).filter(
             Enrollment.user_id == user_id,
             Enrollment.program_id == program_id,
@@ -1459,6 +1469,21 @@ def _check_certificate_eligibility(user_id: str, program_id: str, db):
         if enrollment:
             enrollment.status = "certificate_eligible"
             db.commit()
+
+def _sync_attendance_completion(session_id: str, user_id: str, program_id: str, db):
+    """When a mentee is marked present, ensure a SessionCompletion exists and check certificate."""
+    existing = db.query(SessionCompletion).filter(
+        SessionCompletion.user_id == user_id,
+        SessionCompletion.session_id == session_id
+    ).first()
+    if not existing:
+        completion = SessionCompletion(
+            completion_id=generate_completion_id(db), user_id=user_id,
+            session_id=session_id, program_id=program_id, completed=True
+        )
+        db.add(completion)
+        db.commit()
+    _check_certificate_eligibility(user_id, program_id, db)
 
 @app.post("/api/session/{session_id}/join")
 def join_session(session_id: str, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
@@ -1526,20 +1551,8 @@ def leave_session(session_id: str, current_user: User = Depends(require_mentee),
     attendance.total_minutes_present = total_minutes
     db.commit()
 
-    # Auto-mark present → create SessionCompletion and check certificate eligibility
     if attendance.status == "present":
-        already_complete = db.query(SessionCompletion).filter(
-            SessionCompletion.user_id == current_user.user_id,
-            SessionCompletion.session_id == session_id
-        ).first()
-        if not already_complete:
-            completion = SessionCompletion(
-                completion_id=generate_completion_id(db), user_id=current_user.user_id,
-                session_id=session_id, program_id=session.program_id, completed=True
-            )
-            db.add(completion)
-            db.commit()
-            _check_certificate_eligibility(current_user.user_id, session.program_id, db)
+        _sync_attendance_completion(session_id, current_user.user_id, session.program_id, db)
 
     return {"success": True, "total_minutes": total_minutes, "status": attendance.status}
 
