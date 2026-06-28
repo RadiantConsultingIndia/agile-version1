@@ -64,17 +64,15 @@ export default function NotificationBell({ accentColor }) {
   async function handleNotificationClick(n) {
     try {
       if (!n.is_read) {
-        await api.post(`/api/notifications/${n.id}/read`)
+        await api.post(`/api/notifications/${n.notification_id}/read`)
         setNotifications(prev =>
-          prev.map(x => x.id === n.id ? { ...x, is_read: true } : x)
+          prev.map(x => x.notification_id === n.notification_id ? { ...x, is_read: true } : x)
         )
       }
     } catch {/* ignore */}
     setOpen(false)
     if (n.link) navigate(n.link)
   }
-
-  const borderColor = TYPE_COLORS[notifications?.type] // per-item below
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
@@ -193,10 +191,10 @@ export default function NotificationBell({ accentColor }) {
               </div>
             ) : (
               notifications.map(n => {
-                const color = TYPE_COLORS[n.type] ?? TYPE_COLORS.default
+                const color = TYPE_COLORS[n.notif_type] ?? TYPE_COLORS.default
                 return (
                   <div
-                    key={n.id}
+                    key={n.notification_id}
                     onClick={() => handleNotificationClick(n)}
                     style={{
                       display: 'flex',
