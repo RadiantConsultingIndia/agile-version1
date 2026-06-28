@@ -8,9 +8,12 @@ import random
 import threading
 from datetime import datetime, timezone, timedelta
 
-from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, field_validator
@@ -46,7 +49,10 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 ALLOWED_ORIGINS = [o.strip() for o in FRONTEND_URL.split(",") if o.strip()]
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -406,7 +412,8 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
     return {"success": True, "user_id": user_id, "email": body.email}
 
 @app.post("/api/auth/login/{role}")
-def login(role: str, body: LoginBody, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(role: str, request: Request, body: LoginBody, db: Session = Depends(get_db)):
     if not validate_email(body.email):
         raise HTTPException(status_code=400, detail="Invalid email")
     user = db.query(User).filter(User.email == body.email).first()
@@ -461,7 +468,8 @@ def verify_email(body: VerifyEmailBody, db: Session = Depends(get_db)):
     return {"success": True, "role": user.role}
 
 @app.post("/api/auth/resend-otp")
-def resend_otp(body: ResendOTPBody, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def resend_otp(request: Request, body: ResendOTPBody, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.user_id == body.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -481,7 +489,8 @@ def resend_otp(body: ResendOTPBody, db: Session = Depends(get_db)):
     return {"success": True}
 
 @app.post("/api/auth/forgot-password")
-def forgot_password(body: ForgotPasswordBody, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, body: ForgotPasswordBody, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
     if user:
         db.query(PasswordResetToken).filter(
