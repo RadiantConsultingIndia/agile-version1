@@ -613,12 +613,38 @@ def admin_delete_user(user_id: str, current_user: User = Depends(require_admin),
     db.commit()
     return {"success": True}
 
+# ── Upload helpers ────────────────────────────────────────────────────────────
+
+MAX_UPLOAD_BYTES       = 10  * 1024 * 1024  # 10 MB  (images, docs, certs)
+MAX_VIDEO_UPLOAD_BYTES = 300 * 1024 * 1024  # 300 MB (video resources)
+
+ALLOWED_IMAGE_TYPES  = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+ALLOWED_DOC_TYPES    = ALLOWED_IMAGE_TYPES | {"application/pdf"}
+ALLOWED_VIDEO_TYPES  = {"video/mp4", "video/webm", "video/ogg", "video/quicktime"}
+ALLOWED_RESOURCE_TYPES = ALLOWED_DOC_TYPES | ALLOWED_VIDEO_TYPES | {
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+def _validate_upload(file: UploadFile, contents: bytes, allowed_types: set, max_bytes: int = MAX_UPLOAD_BYTES):
+    if len(contents) > max_bytes:
+        limit_mb = max_bytes // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {limit_mb} MB.")
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=415, detail=f"Unsupported file type: {file.content_type}")
+
 # ── ADMIN: Programs ───────────────────────────────────────────────────────────
 
 @app.post("/api/upload-cover")
 async def upload_cover_image(file: UploadFile = File(...), current_user: User = Depends(require_user)):
     contents = await file.read()
-    url = upload_file(contents, folder="agilementor/covers", resource_type="image")
+    _validate_upload(file, contents, ALLOWED_IMAGE_TYPES)
+    try:
+        url = upload_file(contents, folder="agilementor/covers", resource_type="image")
+    except Exception:
+        raise HTTPException(status_code=503, detail="Image upload failed. Please try again.")
     return {"url": url}
 
 @app.get("/api/admin/programs")
@@ -849,9 +875,13 @@ async def admin_upload_resource(
     current_user: User = Depends(require_admin), db: Session = Depends(get_db)
 ):
     contents = await file.read()
+    _validate_upload(file, contents, ALLOWED_RESOURCE_TYPES, max_bytes=MAX_VIDEO_UPLOAD_BYTES)
     file_type = detect_file_type(file.filename)
-    cld_type = "image" if file_type == "image" else "raw"
-    url = upload_file(contents, folder="agilementor/resources", resource_type=cld_type)
+    cld_type = "video" if file.content_type in ALLOWED_VIDEO_TYPES else ("image" if file_type == "image" else "raw")
+    try:
+        url = upload_file(contents, folder="agilementor/resources", resource_type=cld_type)
+    except Exception:
+        raise HTTPException(status_code=503, detail="File upload failed. Please try again.")
     resource = Resource(
         resource_id=generate_resource_id(db), title=title, description=description or None,
         file_url=url, file_type=file_type, scope="program" if program_id else "global",
@@ -938,7 +968,11 @@ def update_mentor_profile(body: UpdateMentorProfileBody, current_user: User = De
 async def upload_profile_photo(file: UploadFile = File(...),
                                 current_user: User = Depends(require_mentor), db: Session = Depends(get_db)):
     contents = await file.read()
-    url = upload_file(contents, folder="agilementor/profiles", resource_type="image")
+    _validate_upload(file, contents, ALLOWED_IMAGE_TYPES)
+    try:
+        url = upload_file(contents, folder="agilementor/profiles", resource_type="image")
+    except Exception:
+        raise HTTPException(status_code=503, detail="Image upload failed. Please try again.")
     current_user.profile_photo = url
     db.commit()
     return {"success": True, "url": url}
@@ -1102,9 +1136,13 @@ async def mentor_upload_certificate(
     if not mentor:
         raise HTTPException(status_code=404, detail="Mentor profile not found")
     contents = await file.read()
+    _validate_upload(file, contents, ALLOWED_DOC_TYPES)
     file_type = "pdf" if file.filename.lower().endswith(".pdf") else "image"
     resource_type = "raw" if file_type == "pdf" else "image"
-    url = upload_file(contents, folder="agilementor/certificates", resource_type=resource_type)
+    try:
+        url = upload_file(contents, folder="agilementor/certificates", resource_type=resource_type)
+    except Exception:
+        raise HTTPException(status_code=503, detail="File upload failed. Please try again.")
     cert = MentorCertificate(
         cert_id=generate_cert_id(db), mentor_profile_id=mentor.mentor_profile_id,
         title=title, file_url=url, file_type=file_type
@@ -1150,9 +1188,13 @@ async def mentor_upload_resource(
         if not prog:
             raise HTTPException(status_code=403, detail="Not your program")
     contents = await file.read()
+    _validate_upload(file, contents, ALLOWED_RESOURCE_TYPES, max_bytes=MAX_VIDEO_UPLOAD_BYTES)
     file_type = detect_file_type(file.filename)
-    cld_type = "image" if file_type == "image" else "raw"
-    url = upload_file(contents, folder="agilementor/resources", resource_type=cld_type)
+    cld_type = "video" if file.content_type in ALLOWED_VIDEO_TYPES else ("image" if file_type == "image" else "raw")
+    try:
+        url = upload_file(contents, folder="agilementor/resources", resource_type=cld_type)
+    except Exception:
+        raise HTTPException(status_code=503, detail="File upload failed. Please try again.")
     resource = Resource(
         resource_id=generate_resource_id(db), title=title, description=description or None,
         file_url=url, file_type=file_type, scope="program" if program_id else "global",
