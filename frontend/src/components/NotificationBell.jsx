@@ -130,14 +130,14 @@ export default function NotificationBell({ accentColor }) {
       {/* Dropdown */}
       {open && (
         <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 8px)',
-          right: 0,
-          width: 340,
+          position: 'fixed',
+          top: 60,
+          right: 12,
+          width: 'min(340px, calc(100vw - 24px))',
           background: '#fff',
           borderRadius: 14,
           boxShadow: '0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08)',
-          zIndex: 200,
+          zIndex: 1000,
           border: '1px solid #e2e8f0',
           overflow: 'hidden',
         }}>
@@ -174,7 +174,7 @@ export default function NotificationBell({ accentColor }) {
           </div>
 
           {/* List */}
-          <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 'min(340px, 60vh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {notifications.length === 0 ? (
               <div style={{
                 display: 'flex',

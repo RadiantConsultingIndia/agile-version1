@@ -216,7 +216,7 @@ export default function MenteePrograms() {
           <p style={{ fontSize: 14, color: '#94a3b8', margin: 0 }}>Try a different search term.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 22 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 22 }}>
           {filtered.map((p, idx) => (
             <ProgramCard
               key={p.program_id}
