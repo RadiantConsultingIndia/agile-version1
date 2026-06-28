@@ -171,16 +171,26 @@ export default function MentorSessions() {
   const handleSubmit = async e => {
     e.preventDefault(); setError(''); setSaving(true)
     try {
-      let coverUrl = form.cover_image
-      if (coverFile) {
-        const fd = new FormData()
-        fd.append('file', coverFile)
-        const r = await api.post('/api/upload-cover', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-        coverUrl = r.data.url
+      const payload = { ...form, cover_image: form.cover_image || null }
+      let sessionId = editing
+      if (editing) {
+        await api.put(`/api/mentor/sessions/${editing}`, payload)
+      } else {
+        const r = await api.post('/api/mentor/sessions', { ...payload, program_id: selectedProgram })
+        sessionId = r.data.session_id
       }
-      const payload = { ...form, cover_image: coverUrl }
-      if (editing) await api.put(`/api/mentor/sessions/${editing}`, payload)
-      else         await api.post('/api/mentor/sessions', { ...payload, program_id: selectedProgram })
+
+      if (coverFile && sessionId) {
+        try {
+          const fd = new FormData()
+          fd.append('file', coverFile)
+          const up = await api.post('/api/upload-cover', fd)
+          await api.put(`/api/mentor/sessions/${sessionId}`, { cover_image: up.data.url })
+        } catch {
+          // Cover upload failed — session saved without it
+        }
+      }
+
       setShowForm(false); setEditing(null); setForm(emptyForm); setSelectedProgram(''); setCoverFile(null); setCoverPreview(null); load()
     } catch (err) { setError(err.response?.data?.detail || 'Failed to save session') }
     finally { setSaving(false) }

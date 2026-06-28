@@ -161,16 +161,28 @@ export default function AdminPrograms() {
   const handleSubmit = async e => {
     e.preventDefault(); setError(''); setSaving(true)
     try {
-      let coverUrl = form.cover_image
-      if (coverFile) {
-        const fd = new FormData()
-        fd.append('file', coverFile)
-        const r = await api.post('/api/upload-cover', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-        coverUrl = r.data.url
+      // 1. Save program (without cover) first so it always gets created
+      const payload = { ...form, cover_image: form.cover_image || null }
+      let programId = editing
+      if (editing) {
+        await api.put(`/api/admin/programs/${editing}`, payload)
+      } else {
+        const r = await api.post('/api/admin/programs', payload)
+        programId = r.data.program_id
       }
-      const payload = { ...form, cover_image: coverUrl }
-      if (editing) await api.put(`/api/admin/programs/${editing}`, payload)
-      else         await api.post('/api/admin/programs', payload)
+
+      // 2. Upload cover image if a new file was picked, then patch the program
+      if (coverFile && programId) {
+        try {
+          const fd = new FormData()
+          fd.append('file', coverFile)
+          const up = await api.post('/api/upload-cover', fd)
+          await api.put(`/api/admin/programs/${programId}`, { cover_image: up.data.url })
+        } catch {
+          // Cover upload failed — program is saved without it
+        }
+      }
+
       setShowForm(false); setCoverFile(null); setCoverPreview(null); load()
     } catch (err) { setError(err.response?.data?.detail || 'Error saving program') }
     finally { setSaving(false) }
