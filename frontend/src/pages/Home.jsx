@@ -171,10 +171,10 @@ export default function Home() {
           {/* Right */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-              {[['500+','Expert Mentors'],['10K+','Learners Placed'],['4.9 ★','Avg Rating']].map(([v,l]) => (
+              {[['✅','Verified Industry Mentors'],['🎯','Hands-On Project Learning'],['🏆','Certificate on Completion']].map(([icon,l]) => (
                 <div key={l} style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '18px 12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{v}</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>{l}</div>
+                  <div style={{ fontSize: 26 }}>{icon}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>{l}</div>
                 </div>
               ))}
             </div>
