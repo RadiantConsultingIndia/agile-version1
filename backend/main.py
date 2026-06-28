@@ -87,15 +87,19 @@ def validate_password(password: str) -> bool:
 
 
 # ── ID GENERATORS ─────────────────────────────────────────────────────────────
-# All IDs use MAX+1 scoped to the expected prefix to avoid collisions
+# All ID generators: MAX+1 with a uniqueness check loop as final safety net
 
-def _next_count(max_id: str, prefix_len: int) -> int:
-    if not max_id:
-        return 1
+def _unique_id(db, model, pk_attr, prefix: str, width: int) -> str:
+    max_id = db.query(func.max(pk_attr)).filter(pk_attr.like(f"{prefix}%")).scalar()
     try:
-        return int(max_id[prefix_len:]) + 1
+        count = (int(max_id[len(prefix):]) + 1) if max_id else 1
     except (ValueError, TypeError):
-        return 1
+        count = 1
+    while True:
+        candidate = f"{prefix}{count:0{width}d}"
+        if not db.query(model).filter(pk_attr == candidate).first():
+            return candidate
+        count += 1
 
 def generate_user_id(db) -> str:
     year = str(datetime.now().year)[2:]
@@ -104,19 +108,20 @@ def generate_user_id(db) -> str:
         count = (int(max_id[2:]) + 1) if max_id else 1
     except (ValueError, TypeError):
         count = 1
-    return f"{year}{count:03d}"
+    while True:
+        candidate = f"{year}{count:03d}"
+        if not db.query(User).filter(User.user_id == candidate).first():
+            return candidate
+        count += 1
 
 def generate_mentor_id(db) -> str:
-    max_id = db.query(func.max(Mentor.mentor_profile_id)).filter(Mentor.mentor_profile_id.like("MTR%")).scalar()
-    return f"MTR{_next_count(max_id, 3):04d}"
+    return _unique_id(db, Mentor, Mentor.mentor_profile_id, "MTR", 4)
 
 def generate_program_id(db) -> str:
-    max_id = db.query(func.max(Program.program_id)).filter(Program.program_id.like("PRG%")).scalar()
-    return f"PRG{_next_count(max_id, 3):04d}"
+    return _unique_id(db, Program, Program.program_id, "PRG", 4)
 
 def generate_invite_id(db) -> str:
-    max_id = db.query(func.max(MentorInvite.invite_id)).filter(MentorInvite.invite_id.like("INV%")).scalar()
-    return f"INV{_next_count(max_id, 3):04d}"
+    return _unique_id(db, MentorInvite, MentorInvite.invite_id, "INV", 4)
 
 def generate_enrollment_id(db, program_title: str = "") -> str:
     year = str(datetime.now().year)[2:]
@@ -127,43 +132,38 @@ def generate_enrollment_id(db, program_title: str = "") -> str:
         count = (int(max_id[-4:]) + 1) if max_id else 1
     except (ValueError, TypeError):
         count = 1
-    return f"{year}{code}{count:04d}"
+    while True:
+        candidate = f"{year}{code}{count:04d}"
+        if not db.query(Enrollment).filter(Enrollment.enrollment_id == candidate).first():
+            return candidate
+        count += 1
 
 def generate_session_id(db) -> str:
-    max_id = db.query(func.max(MentorSession.session_id)).filter(MentorSession.session_id.like("SES%")).scalar()
-    return f"SES{_next_count(max_id, 3):04d}"
+    return _unique_id(db, MentorSession, MentorSession.session_id, "SES", 4)
 
 def generate_attendance_id(db) -> str:
-    max_id = db.query(func.max(Attendance.attendance_id)).filter(Attendance.attendance_id.like("ATT%")).scalar()
-    return f"ATT{_next_count(max_id, 3):04d}"
+    return _unique_id(db, Attendance, Attendance.attendance_id, "ATT", 4)
 
 def generate_cert_id(db) -> str:
-    max_id = db.query(func.max(MentorCertificate.cert_id)).filter(MentorCertificate.cert_id.like("CRT%")).scalar()
-    return f"CRT{_next_count(max_id, 3):04d}"
+    return _unique_id(db, MentorCertificate, MentorCertificate.cert_id, "CRT", 4)
 
 def generate_resource_id(db) -> str:
-    max_id = db.query(func.max(Resource.resource_id)).filter(Resource.resource_id.like("RES%")).scalar()
-    return f"RES{_next_count(max_id, 3):04d}"
+    return _unique_id(db, Resource, Resource.resource_id, "RES", 4)
 
 def generate_otp_id(db) -> str:
-    max_id = db.query(func.max(EmailOTP.otp_id)).filter(EmailOTP.otp_id.like("OTP%")).scalar()
-    return f"OTP{_next_count(max_id, 3):04d}"
+    return _unique_id(db, EmailOTP, EmailOTP.otp_id, "OTP", 4)
 
 def generate_progress_id(db) -> str:
-    max_id = db.query(func.max(VideoProgress.progress_id)).filter(VideoProgress.progress_id.like("VP%")).scalar()
-    return f"VP{_next_count(max_id, 2):04d}"
+    return _unique_id(db, VideoProgress, VideoProgress.progress_id, "VP", 4)
 
 def generate_completion_id(db) -> str:
-    max_id = db.query(func.max(SessionCompletion.completion_id)).filter(SessionCompletion.completion_id.like("SC%")).scalar()
-    return f"SC{_next_count(max_id, 2):04d}"
+    return _unique_id(db, SessionCompletion, SessionCompletion.completion_id, "SC", 4)
 
 def generate_feedback_id(db) -> str:
-    max_id = db.query(func.max(Feedback.feedback_id)).filter(Feedback.feedback_id.like("FB%")).scalar()
-    return f"FB{_next_count(max_id, 2):04d}"
+    return _unique_id(db, Feedback, Feedback.feedback_id, "FB", 4)
 
 def generate_notification_id(db) -> str:
-    max_id = db.query(func.max(Notification.notification_id)).filter(Notification.notification_id.like("NT%")).scalar()
-    return f"NT{_next_count(max_id, 2):04d}"
+    return _unique_id(db, Notification, Notification.notification_id, "NT", 4)
 
 def _notify(user_id: str, title: str, message: str, notif_type: str, link: str, db):
     try:
