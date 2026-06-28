@@ -448,7 +448,8 @@ def logout():
     return response
 
 @app.post("/api/auth/verify-email")
-def verify_email(body: VerifyEmailBody, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def verify_email(request: Request, body: VerifyEmailBody, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.user_id == body.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
