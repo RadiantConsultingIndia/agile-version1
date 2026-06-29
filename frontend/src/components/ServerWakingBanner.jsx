@@ -1,18 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import api from '../api/client'
 
 const SLOW_THRESHOLD_MS = 4000
 
 export default function ServerWakingBanner() {
   const [state, setState] = useState('idle') // idle | waking | online
+  const wakingRef = useRef(false)
 
   useEffect(() => {
-    const timer = setTimeout(() => setState('waking'), SLOW_THRESHOLD_MS)
+    const timer = setTimeout(() => {
+      setState('waking')
+      wakingRef.current = true
+    }, SLOW_THRESHOLD_MS)
 
     api.get('/health')
       .then(() => {
         clearTimeout(timer)
-        if (state === 'waking') {
+        if (wakingRef.current) {
           setState('online')
           setTimeout(() => setState('idle'), 2500)
         } else {

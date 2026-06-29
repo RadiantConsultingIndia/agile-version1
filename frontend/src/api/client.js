@@ -11,8 +11,10 @@ api.interceptors.response.use(
   err => {
     if (!err.response) {
       toast('Cannot reach the server. Please check your connection.')
-    } else if (err.response.status >= 500) {
-      toast(err.response.data?.detail || 'Something went wrong on the server. Please try again.')
+    } else if (err.response.status >= 500 && !err.response.data?.detail) {
+      // Only show generic toast if backend didn't send a specific message
+      // (specific messages are handled by individual page catch blocks)
+      toast('Something went wrong on the server. Please try again.')
     }
     return Promise.reject(err)
   }
