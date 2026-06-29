@@ -24,7 +24,7 @@ CREATE TABLE "User" (
     password_hash   VARCHAR(255)    NOT NULL,
     role            VARCHAR(10)     NOT NULL CHECK (role IN ('admin', 'mentor', 'mentee')),
     phone           VARCHAR(15),
-    status          VARCHAR(10)     DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+    status          VARCHAR(10)     DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'unverified')),
     profile_photo   VARCHAR(255),
     created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
 );
@@ -125,8 +125,7 @@ CREATE TABLE "Enrollment" (
     user_id         VARCHAR(10)     NOT NULL REFERENCES "User"(user_id),
     program_id      VARCHAR(10)     NOT NULL REFERENCES "Programs"(program_id),
     enrollment_date TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
-    status          VARCHAR(25)     DEFAULT 'active',    -- active | completed | certificate_eligible
-    UNIQUE(user_id, program_id)
+    status          VARCHAR(15)     DEFAULT 'active'     -- active | pending | completed | certificate_eligible
 );
 ```
 
@@ -322,4 +321,5 @@ print(pwd_context.hash("YourPasswordHere"))
 | 1.0 | Initial schema |
 | 1.1 | Added `join_intervals`, `total_minutes_present`, `is_auto_marked` to `Attendence`; added `VideoProgress` and `SessionCompletion` tables; updated `Enrollment.status` to support `certificate_eligible`; fixed `MentorInvite` FK constraints to `ON DELETE SET NULL` |
 | 1.2 | Added `PasswordResetToken` table for forgot password flow; added `Resource` table |
+| 1.4 | Fixed `User.status` CHECK to include `'unverified'` (set at signup before OTP verified); fixed `Enrollment.status` from `VARCHAR(25)` to `VARCHAR(15)`; removed `UNIQUE(user_id, program_id)` from `Enrollment` (not in ORM model, not in actual DB); fixed `Notification.user_id` from untyped `String` to `VARCHAR(10)` in model |
 | 1.3 | Fixed `feedback` table name (lowercase) and columns (`mentee_user_id`, `rating`, `comments`); fixed `announcements` table name (lowercase plural) and columns (`message`, `created_by`, `created_at`); fixed `notifications` table name (lowercase plural), PK renamed to `notification_id`, added `notif_type` and `link` columns; updated `Resource` columns to match actual model (`scope`, `session_id`, `uploaded_at`; removed `resource_type`, `link_url`, `text_content`, `uploaded_by_role`); added `EmailOTP` table; fixed SQL code block formatting throughout; removed incorrect FK REFERENCES from `feedback`, `announcements`, `notifications`, `EmailOTP` (models do not declare ForeignKey for those columns); added `NOT NULL` to `MentorCertificate.mentor_profile_id` |
