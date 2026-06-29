@@ -72,9 +72,15 @@ export default function VerifyEmail() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .verify-left { display: none !important; }
+          .verify-right { padding: 32px 20px !important; }
+        }
+      `}</style>
 
       {/* Left decorative panel */}
-      <div style={{ width: '45%', background: 'linear-gradient(160deg, #0c1a3d 0%, #0f2356 60%, #0c1a3d 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+      <div className="verify-left" style={{ width: '45%', background: 'linear-gradient(160deg, #0c1a3d 0%, #0f2356 60%, #0c1a3d 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -80, right: -80, width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle,rgba(59,130,246,0.18),transparent 70%)', pointerEvents: 'none' }} />
 
         {/* Logo */}
@@ -122,7 +128,7 @@ export default function VerifyEmail() {
       </div>
 
       {/* Right — OTP form */}
-      <div style={{ flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 40px' }}>
+      <div className="verify-right" style={{ flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 40px' }}>
         <div style={{ width: '100%', maxWidth: 440 }}>
 
           <h2 style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', margin: '0 0 8px', letterSpacing: '-0.5px' }}>
@@ -156,7 +162,8 @@ export default function VerifyEmail() {
                   onChange={e => handleChange(i, e.target.value)}
                   onKeyDown={e => handleKeyDown(i, e)}
                   style={{
-                    width: 58, height: 66, textAlign: 'center', fontSize: 26, fontWeight: 800,
+                    width: 'clamp(40px, 13vw, 58px)', height: 'clamp(48px, 15vw, 66px)',
+                    textAlign: 'center', fontSize: 'clamp(20px, 5vw, 26px)', fontWeight: 800,
                     borderRadius: 12, outline: 'none', boxSizing: 'border-box',
                     border: d ? '2px solid #2563eb' : '2px solid #e2e8f0',
                     background: d ? '#eff6ff' : '#fafafa',
