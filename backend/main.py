@@ -21,7 +21,7 @@ from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from security import hash_password, verify_password, create_access_token, decode_access_token
-from database import get_db
+from database import get_db, SessionLocal
 from models.user import User
 from models.mentor_invite import MentorInvite
 from models.mentor import Mentor
@@ -387,6 +387,10 @@ def detect_file_type(filename: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 # AUTH ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 @app.get("/api/me")
 def get_me(current_user: User = Depends(require_user)):

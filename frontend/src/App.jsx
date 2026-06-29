@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
 import ToastContainer from './components/ToastContainer'
+import ServerWakingBanner from './components/ServerWakingBanner'
 
 import Home from './pages/Home'
 import NotFound from './pages/NotFound'
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
         <ToastContainer />
+        <ServerWakingBanner />
       </AuthProvider>
     </BrowserRouter>
   )
