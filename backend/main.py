@@ -64,6 +64,26 @@ app.add_middleware(
 )
 
 scheduler = BackgroundScheduler(daemon=True)
+
+def auto_complete_past_sessions():
+    """Mark live sessions as completed if their scheduled time + duration has passed."""
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        past_sessions = db.query(MentorSession).filter(
+            MentorSession.session_type == "live",
+            MentorSession.status == "scheduled",
+            MentorSession.scheduled_at != None,
+        ).all()
+        for s in past_sessions:
+            end_time = s.scheduled_at + timedelta(minutes=s.duration_minutes or 60)
+            if end_time.replace(tzinfo=timezone.utc) < now:
+                s.status = "completed"
+        db.commit()
+    finally:
+        db.close()
+
+scheduler.add_job(auto_complete_past_sessions, trigger="interval", hours=1, next_run_time=datetime.now())
 scheduler.start()
 
 @app.on_event("shutdown")
