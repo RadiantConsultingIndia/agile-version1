@@ -84,11 +84,13 @@ function ProgramCard({ e, idx }) {
     <div style={{ minWidth: 230, maxWidth: 230, background: '#fff', borderRadius: 18, border: '1px solid #f1f5f9', overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', transition: 'box-shadow 0.2s, transform 0.2s' }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.06)'; e.currentTarget.style.transform = 'translateY(0)' }}>
-      {/* Gradient banner */}
-      <div style={{ background: grad, padding: '20px 18px', position: 'relative', minHeight: 80 }}>
-        <span style={{ fontSize: 38, lineHeight: 1 }}>{emoji}</span>
+      {/* Banner: cover image or gradient */}
+      <div style={{ background: e.cover_image ? '#f8fafc' : grad, padding: '20px 18px', position: 'relative', minHeight: 80, overflow: 'hidden' }}>
+        {e.cover_image
+          ? <img src={e.cover_image} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <span style={{ fontSize: 38, lineHeight: 1 }}>{emoji}</span>}
         {isCert && (
-          <span style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(251,191,36,0.9)', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 50 }}>🏆 Cert Ready</span>
+          <span style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(251,191,36,0.9)', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 50, zIndex: 1 }}>🏆 Cert Ready</span>
         )}
       </div>
       {/* Body */}

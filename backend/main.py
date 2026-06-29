@@ -1569,6 +1569,7 @@ def my_enrollments(current_user: User = Depends(require_mentee), db: Session = D
         {"enrollment_id": e.enrollment_id, "program_id": e.program_id,
          "program_title": programs_map[e.program_id].title if e.program_id in programs_map else e.program_id,
          "program_description": programs_map[e.program_id].description if e.program_id in programs_map else None,
+         "cover_image": programs_map[e.program_id].cover_image if e.program_id in programs_map else None,
          "mentor_name": mentors_map.get(programs_map[e.program_id].assigned_mentor) if e.program_id in programs_map else None,
          "status": e.status,
          "progress": round(done_sessions_by_prog.get(e.program_id, 0) / total_sessions_by_prog[e.program_id] * 100)

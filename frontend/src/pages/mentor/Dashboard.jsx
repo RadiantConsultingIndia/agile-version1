@@ -83,9 +83,11 @@ function ProgramCard({ p, idx }) {
     <div style={{ minWidth: 220, maxWidth: 220, background: '#fff', borderRadius: 18, border: '1px solid #f1f5f9', overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', transition: 'box-shadow 0.2s, transform 0.2s' }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.06)'; e.currentTarget.style.transform = 'translateY(0)' }}>
-      <div style={{ background: grad, padding: '20px 18px', position: 'relative', minHeight: 76 }}>
-        <span style={{ fontSize: 36, lineHeight: 1 }}>{emoji}</span>
-        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 50, background: isActive ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.25)', color: isActive ? '#15803d' : 'rgba(255,255,255,0.8)' }}>
+      <div style={{ background: p.cover_image ? '#f8fafc' : grad, padding: '20px 18px', position: 'relative', minHeight: 76, overflow: 'hidden' }}>
+        {p.cover_image
+          ? <img src={p.cover_image} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <span style={{ fontSize: 36, lineHeight: 1 }}>{emoji}</span>}
+        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 50, background: isActive ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.25)', color: isActive ? '#15803d' : 'rgba(255,255,255,0.8)', zIndex: 1 }}>
           {isActive ? '● Active' : p.status}
         </span>
       </div>
