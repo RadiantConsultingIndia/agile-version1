@@ -55,6 +55,7 @@ export default function Login() {
   if (unverified) {
     return (
       <div className="am-auth-page" style={S.page}>
+        <HomeButton />
         <LeftPanel />
         <div className="am-auth-right" style={S.right}>
           <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
@@ -78,6 +79,7 @@ export default function Login() {
 
   return (
     <div className="am-auth-page" style={S.page}>
+      <HomeButton />
       <LeftPanel />
 
       <div className="am-auth-right" style={S.right}>
@@ -188,6 +190,21 @@ export default function Login() {
         </div>
       </div>
     </div>
+  )
+}
+
+function HomeButton() {
+  return (
+    <Link to="/" style={{
+      position: 'fixed', top: 20, left: 20, zIndex: 50,
+      display: 'flex', alignItems: 'center', gap: 7,
+      background: '#fff', border: '1px solid #e2e8f0',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.12)',
+      borderRadius: 10, padding: '9px 16px',
+      color: '#0f172a', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+    }}>
+      ← Home
+    </Link>
   )
 }
 
