@@ -11,7 +11,9 @@ const LEFT_STATS = [
 ]
 
 const S = {
-  page: { display: 'flex', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" },
+  page: { display: 'flex', flexDirection: 'column', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" },
+  row: { display: 'flex', flex: 1 },
+  topbar: { display: 'flex', alignItems: 'center', padding: '14px 28px', background: '#fff', borderBottom: '1px solid #eef1f6' },
   left: { width: '45%', background: 'linear-gradient(160deg, #0c1a3d 0%, #0f2356 60%, #0c1a3d 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
   right: { flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 40px' },
 }
@@ -55,22 +57,24 @@ export default function Login() {
   if (unverified) {
     return (
       <div className="am-auth-page" style={S.page}>
-        <HomeButton />
-        <LeftPanel />
-        <div className="am-auth-right" style={S.right}>
-          <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
-            <div style={{ fontSize: 56, marginBottom: 20 }}>📬</div>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Verify your email</h2>
-            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 32 }}>
-              Your account isn't verified yet. Click below to enter your OTP.
-            </p>
-            <Link to={`/verify-email?user_id=${unverified.userId}&email=${encodeURIComponent(unverified.email)}`}
-              style={{ display: 'inline-block', background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', color: '#fff', fontWeight: 700, fontSize: 14, padding: '13px 32px', borderRadius: 12, textDecoration: 'none' }}>
-              Enter OTP →
-            </Link>
-            <p style={{ marginTop: 20, fontSize: 14, color: '#64748b' }}>
-              <button onClick={() => setUnverified(null)} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>← Back to login</button>
-            </p>
+        <TopBar />
+        <div className="am-auth-row" style={S.row}>
+          <LeftPanel />
+          <div className="am-auth-right" style={S.right}>
+            <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
+              <div style={{ fontSize: 56, marginBottom: 20 }}>📬</div>
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Verify your email</h2>
+              <p style={{ color: '#64748b', fontSize: 14, marginBottom: 32 }}>
+                Your account isn't verified yet. Click below to enter your OTP.
+              </p>
+              <Link to={`/verify-email?user_id=${unverified.userId}&email=${encodeURIComponent(unverified.email)}`}
+                style={{ display: 'inline-block', background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', color: '#fff', fontWeight: 700, fontSize: 14, padding: '13px 32px', borderRadius: 12, textDecoration: 'none' }}>
+                Enter OTP →
+              </Link>
+              <p style={{ marginTop: 20, fontSize: 14, color: '#64748b' }}>
+                <button onClick={() => setUnverified(null)} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>← Back to login</button>
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -79,11 +83,12 @@ export default function Login() {
 
   return (
     <div className="am-auth-page" style={S.page}>
-      <HomeButton />
-      <LeftPanel />
+      <TopBar />
+      <div className="am-auth-row" style={S.row}>
+        <LeftPanel />
 
-      <div className="am-auth-right" style={S.right}>
-        <div style={{ width: '100%', maxWidth: 460 }}>
+        <div className="am-auth-right" style={S.right}>
+          <div style={{ width: '100%', maxWidth: 460 }}>
 
           {/* Role tabs */}
           <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 14, padding: 5, marginBottom: 36 }}>
@@ -187,28 +192,27 @@ export default function Login() {
               Admin accounts are created by the platform team.
             </p>
           )}
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function HomeButton() {
+function TopBar() {
   return (
-    <Link to="/" className="am-home-btn" style={{
-      position: 'fixed', top: 20, left: 20, zIndex: 50,
-      display: 'flex', alignItems: 'center', gap: 7,
-      background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)',
-      backdropFilter: 'blur(8px)',
-      borderRadius: 10, padding: '9px 16px',
-      color: '#cbd5e1', fontSize: 13, fontWeight: 600, textDecoration: 'none',
-      transition: 'background 0.15s, color 0.15s',
-    }}
-    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; e.currentTarget.style.color = '#fff' }}
-    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#cbd5e1' }}
-    >
-      ← Home
-    </Link>
+    <div style={S.topbar}>
+      <Link to="/" style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        color: '#475569', fontSize: 13.5, fontWeight: 600, textDecoration: 'none',
+        padding: '6px 10px', borderRadius: 8, transition: 'background 0.15s, color 0.15s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#0f172a' }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569' }}
+      >
+        ← Home
+      </Link>
+    </div>
   )
 }
 
