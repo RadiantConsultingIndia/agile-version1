@@ -21,7 +21,7 @@ from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from security import hash_password, verify_password, create_access_token, decode_access_token
-from database import get_db, SessionLocal
+from database import get_db, SessionLocal, Base, engine
 from models.user import User
 from models.mentor_invite import MentorInvite
 from models.mentor import Mentor
@@ -52,6 +52,7 @@ PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+Base.metadata.create_all(bind=engine)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
