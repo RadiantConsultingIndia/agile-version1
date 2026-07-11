@@ -16,6 +16,7 @@ const NAV = [
       { to: '/programs',           label: 'Browse Programs', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
       { to: '/mentee/enrollments', label: 'My Enrollments', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
       { to: '/mentee/sessions',    label: 'My Sessions',    icon: 'M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z' },
+      { to: '/mentee/ai-interview', label: 'AI Interview',  icon: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3' },
     ],
   },
   {
@@ -32,6 +33,7 @@ const CRUMBS = {
   '/programs':            ['Browse Programs','All Programs'],
   '/mentee/enrollments':  ['My Enrollments', 'Active'],
   '/mentee/sessions':     ['My Sessions',    'All Sessions'],
+  '/mentee/ai-interview': ['AI Interview',   'Practice'],
   '/mentee/attendance':   ['Attendance',     'My Record'],
   '/mentee/resources':    ['Resources',      'Study Materials'],
 }
