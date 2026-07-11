@@ -6,6 +6,7 @@ import io
 import secrets
 import random
 import threading
+import anthropic
 from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form, Request, Response
@@ -49,6 +50,7 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 ALLOWED_ORIGINS = [o.strip() for o in FRONTEND_URL.split(",") if o.strip()]
 PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -1397,6 +1399,44 @@ def get_programs(current_user: User = Depends(require_user), db: Session = Depen
              "start_date": str(p.start_date) if p.start_date else None,
              "end_date": str(p.end_date) if p.end_date else None,
              "cover_image": p.cover_image} for p in programs]
+
+AI_INTERVIEW_SYSTEM_PROMPT = """You are an experienced, friendly technical interviewer conducting a live mock interview to help a candidate practice.
+
+Step 1: Start with a warm greeting and ask which role they'd like to practice for: SDE (Software Development Engineer), Analyst, or Sales. Do this only once, at the very start.
+Step 2: Once they answer, ask 8-10 relevant interview questions one at a time, mixing technical and behavioral questions for that role. After each answer, briefly acknowledge it (a sentence, not a paragraph) and occasionally ask a natural follow-up before moving to the next question.
+Step 3: After the last question, or if the candidate says they want to stop, give a concise, encouraging closing summary: 2-3 specific strengths, 2-3 specific areas to improve, and an overall readiness assessment. End the interview there — do not ask further questions after this.
+
+Keep every response conversational and concise, like a real interviewer speaking out loud — not a long written report."""
+
+class AIInterviewMessage(BaseModel):
+    role: str
+    content: str
+
+class AIInterviewBody(BaseModel):
+    messages: list[AIInterviewMessage]
+
+@app.post("/api/mentee/ai-interview/message")
+@limiter.limit("20/minute")
+def ai_interview_message(request: Request, body: AIInterviewBody, current_user: User = Depends(require_mentee)):
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="AI interview isn't configured yet. Please try again later.")
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="At least one message is required.")
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=500,
+            system=AI_INTERVIEW_SYSTEM_PROMPT,
+            messages=[{"role": m.role, "content": m.content} for m in body.messages],
+        )
+    except anthropic.APIError as e:
+        print(f"[AI INTERVIEW ERROR] {e}")
+        raise HTTPException(status_code=502, detail="The AI interviewer is temporarily unavailable. Please try again.")
+
+    reply = next((b.text for b in response.content if b.type == "text"), "")
+    return {"reply": reply}
 
 # Alias used by mentee Browse Programs page
 @app.get("/api/mentee/programs/browse")
