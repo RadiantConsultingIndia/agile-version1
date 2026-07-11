@@ -80,12 +80,12 @@ export default function VerifyEmail() {
       `}</style>
 
       {/* Left decorative panel */}
-      <div className="verify-left" style={{ width: '45%', background: 'linear-gradient(160deg, #0c1a3d 0%, #0f2356 60%, #0c1a3d 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+      <div className="verify-left" style={{ width: '45%', background: 'linear-gradient(160deg, var(--brand-navy-deep) 0%, var(--brand-navy) 60%, var(--brand-navy-deep) 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -80, right: -80, width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle,rgba(59,130,246,0.18),transparent 70%)', pointerEvents: 'none' }} />
 
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 56, position: 'relative' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#2563eb,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,var(--brand-navy),#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}>
             <svg viewBox="0 0 32 28" width="20" height="20" fill="none">
               <path d="M2 18 Q6 4 12 14 Q16 20 20 8 Q24 0 30 12" stroke="white" strokeWidth="3" strokeLinecap="round"/>
             </svg>
@@ -115,7 +115,7 @@ export default function VerifyEmail() {
             { emoji: '🔄', label: 'Didn\'t get it?', sub: 'Use the resend button on the right' },
           ].map(s => (
             <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '14px 18px' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg,#1d4ed8,#4338ca)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
                 {s.emoji}
               </div>
               <div>
@@ -137,7 +137,7 @@ export default function VerifyEmail() {
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 8px' }}>
             Enter the 6-digit code sent to:
           </p>
-          <p style={{ fontSize: 15, fontWeight: 700, color: '#2563eb', margin: '0 0 36px', wordBreak: 'break-all' }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-teal-deep)', margin: '0 0 36px', wordBreak: 'break-all' }}>
             {email || 'your email address'}
           </p>
 
@@ -165,7 +165,7 @@ export default function VerifyEmail() {
                     width: 'clamp(40px, 13vw, 58px)', height: 'clamp(48px, 15vw, 66px)',
                     textAlign: 'center', fontSize: 'clamp(20px, 5vw, 26px)', fontWeight: 800,
                     borderRadius: 12, outline: 'none', boxSizing: 'border-box',
-                    border: d ? '2px solid #2563eb' : '2px solid #e2e8f0',
+                    border: d ? '2px solid var(--brand-teal)' : '2px solid #e2e8f0',
                     background: d ? '#eff6ff' : '#fafafa',
                     color: '#0f172a', fontFamily: "'Courier New', monospace",
                     transition: 'border-color 0.15s, background 0.15s',
@@ -178,7 +178,7 @@ export default function VerifyEmail() {
               style={{
                 width: '100%', padding: '15px', borderRadius: 12, border: 'none',
                 cursor: (loading || otp.length < 6) ? 'not-allowed' : 'pointer',
-                background: (loading || otp.length < 6) ? '#93c5fd' : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+                background: (loading || otp.length < 6) ? '#93c5fd' : 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))',
                 color: '#fff', fontSize: 15, fontWeight: 700,
                 boxShadow: (loading || otp.length < 6) ? 'none' : '0 6px 20px rgba(37,99,235,0.4)',
               }}>
@@ -189,14 +189,14 @@ export default function VerifyEmail() {
           <div style={{ textAlign: 'center', marginTop: 24 }}>
             <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 12px' }}>Didn't receive the code?</p>
             <button onClick={handleResend} disabled={resending}
-              style={{ background: 'none', border: '1.5px solid #bfdbfe', color: '#2563eb', fontSize: 14, fontWeight: 600, padding: '10px 24px', borderRadius: 10, cursor: resending ? 'not-allowed' : 'pointer', opacity: resending ? 0.6 : 1 }}>
+              style={{ background: 'none', border: '1.5px solid #bfdbfe', color: 'var(--brand-teal-deep)', fontSize: 14, fontWeight: 600, padding: '10px 24px', borderRadius: 10, cursor: resending ? 'not-allowed' : 'pointer', opacity: resending ? 0.6 : 1 }}>
               {resending ? 'Resending…' : '↺ Resend OTP'}
             </button>
           </div>
 
           <p style={{ textAlign: 'center', fontSize: 13, color: '#94a3b8', marginTop: 24 }}>
             Wrong email?{' '}
-            <a href="/signup/mentee" style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
+            <a href="/signup/mentee" style={{ color: 'var(--brand-teal-deep)', fontWeight: 600, textDecoration: 'none' }}>
               Start over
             </a>
           </p>

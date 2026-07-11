@@ -14,7 +14,7 @@ const S = {
   page: { display: 'flex', flexDirection: 'column', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" },
   row: { display: 'flex', flex: 1 },
   topbar: { display: 'flex', alignItems: 'center', padding: '14px 28px', background: '#fff', borderBottom: '1px solid #eef1f6' },
-  left: { width: '45%', background: 'linear-gradient(160deg, #0c1a3d 0%, #0f2356 60%, #0c1a3d 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
+  left: { width: '45%', background: 'linear-gradient(160deg, var(--brand-navy-deep) 0%, var(--brand-navy) 60%, var(--brand-navy-deep) 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
   right: { flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 40px' },
 }
 
@@ -68,11 +68,11 @@ export default function Login() {
                 Your account isn't verified yet. Click below to enter your OTP.
               </p>
               <Link to={`/verify-email?user_id=${unverified.userId}&email=${encodeURIComponent(unverified.email)}`}
-                style={{ display: 'inline-block', background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', color: '#fff', fontWeight: 700, fontSize: 14, padding: '13px 32px', borderRadius: 12, textDecoration: 'none' }}>
+                style={{ display: 'inline-block', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontWeight: 700, fontSize: 14, padding: '13px 32px', borderRadius: 12, textDecoration: 'none' }}>
                 Enter OTP →
               </Link>
               <p style={{ marginTop: 20, fontSize: 14, color: '#64748b' }}>
-                <button onClick={() => setUnverified(null)} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>← Back to login</button>
+                <button onClick={() => setUnverified(null)} style={{ background: 'none', border: 'none', color: 'var(--brand-teal-deep)', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>← Back to login</button>
               </p>
             </div>
           </div>
@@ -111,7 +111,7 @@ export default function Login() {
             Sign in to AgileMentor
           </h2>
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 32px' }}>
-            Logging in as <span style={{ color: '#2563eb', fontWeight: 700 }}>{role}</span>
+            Logging in as <span style={{ color: 'var(--brand-teal-deep)', fontWeight: 700 }}>{role}</span>
           </p>
 
           {/* Error */}
@@ -130,7 +130,7 @@ export default function Login() {
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
                 placeholder="you@gmail.com"
                 style={{ width: '100%', padding: '13px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
-                onFocus={e => e.target.style.borderColor = '#2563eb'}
+                onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                 onBlur={e => e.target.style.borderColor = '#e2e8f0'}
               />
             </div>
@@ -144,7 +144,7 @@ export default function Login() {
                 <input type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required
                   placeholder="Enter your password"
                   style={{ width: '100%', padding: '13px 46px 13px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
-                  onFocus={e => e.target.style.borderColor = '#2563eb'}
+                  onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                   onBlur={e => e.target.style.borderColor = '#e2e8f0'}
                 />
                 <button type="button" onClick={() => setShowPass(v => !v)}
@@ -156,7 +156,7 @@ export default function Login() {
 
             {/* Forgot */}
             <div style={{ textAlign: 'right', marginBottom: 28 }}>
-              <Link to="/forgot-password" style={{ color: '#2563eb', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+              <Link to="/forgot-password" style={{ color: 'var(--brand-teal-deep)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
                 Forgot password?
               </Link>
             </div>
@@ -165,7 +165,7 @@ export default function Login() {
             <button type="submit" disabled={loading}
               style={{
                 width: '100%', padding: '15px', borderRadius: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-                background: loading ? '#93c5fd' : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+                background: loading ? '#93c5fd' : 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))',
                 color: '#fff', fontSize: 15, fontWeight: 700, letterSpacing: '0.01em',
                 boxShadow: loading ? 'none' : '0 6px 20px rgba(37,99,235,0.4)',
               }}>
@@ -183,7 +183,7 @@ export default function Login() {
           {role !== 'Admin' ? (
             <p style={{ textAlign: 'center', fontSize: 14, color: '#64748b' }}>
               Don't have an account?{' '}
-              <Link to={`/signup/${role.toLowerCase()}`} style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+              <Link to={`/signup/${role.toLowerCase()}`} style={{ color: 'var(--brand-teal-deep)', fontWeight: 700, textDecoration: 'none' }}>
                 Create one for free
               </Link>
             </p>
@@ -225,7 +225,7 @@ function LeftPanel() {
 
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 52, position: 'relative' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#2563eb,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,var(--brand-navy),#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}>
           <svg viewBox="0 0 32 28" width="20" height="20" fill="none">
             <path d="M2 18 Q6 4 12 14 Q16 20 20 8 Q24 0 30 12" stroke="white" strokeWidth="3" strokeLinecap="round"/>
           </svg>
@@ -256,7 +256,7 @@ function LeftPanel() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {LEFT_STATS.map(s => (
           <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 16, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '16px 20px' }}>
-            <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(135deg,#1d4ed8,#4338ca)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: '0 4px 12px rgba(29,78,216,0.4)' }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: '0 4px 12px rgba(29,78,216,0.4)' }}>
               {s.emoji}
             </div>
             <div>

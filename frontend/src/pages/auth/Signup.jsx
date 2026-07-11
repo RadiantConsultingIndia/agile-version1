@@ -30,13 +30,13 @@ const LEFT_CONTENT = {
 function LeftPanel({ role }) {
   const c = LEFT_CONTENT[role] || LEFT_CONTENT.Mentee
   return (
-    <div className="am-auth-left" style={{ width: '45%', background: 'linear-gradient(160deg, #0c1a3d 0%, #0f2356 60%, #0c1a3d 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+    <div className="am-auth-left" style={{ width: '45%', background: 'linear-gradient(160deg, var(--brand-navy-deep) 0%, var(--brand-navy) 60%, var(--brand-navy-deep) 100%)', padding: '64px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -80, right: -80, width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle,rgba(59,130,246,0.18),transparent 70%)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: -60, left: '20%', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.12),transparent 70%)', pointerEvents: 'none' }} />
 
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 52, position: 'relative' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#2563eb,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,var(--brand-navy),#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}>
           <svg viewBox="0 0 32 28" width="20" height="20" fill="none">
             <path d="M2 18 Q6 4 12 14 Q16 20 20 8 Q24 0 30 12" stroke="white" strokeWidth="3" strokeLinecap="round"/>
           </svg>
@@ -65,7 +65,7 @@ function LeftPanel({ role }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {c.cards.map(s => (
           <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 16, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '16px 20px' }}>
-            <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(135deg,#1d4ed8,#4338ca)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: '0 4px 12px rgba(29,78,216,0.4)' }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: '0 4px 12px rgba(29,78,216,0.4)' }}>
               {s.emoji}
             </div>
             <div>
@@ -138,7 +138,7 @@ export default function Signup() {
             Create your account
           </h2>
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 28px' }}>
-            Signing up as a <span style={{ color: '#2563eb', fontWeight: 700 }}>{role}</span>
+            Signing up as a <span style={{ color: 'var(--brand-teal-deep)', fontWeight: 700 }}>{role}</span>
             {' '}— an OTP will be sent to verify your email.
           </p>
 
@@ -154,7 +154,7 @@ export default function Signup() {
               <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>Full Name</label>
               <input type="text" required value={form.full_name} onChange={e => set('full_name', e.target.value)}
                 placeholder="Jane Smith" style={inputStyle}
-                onFocus={e => e.target.style.borderColor = '#2563eb'}
+                onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                 onBlur={e => e.target.style.borderColor = '#e2e8f0'}
               />
             </div>
@@ -164,7 +164,7 @@ export default function Signup() {
               <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>Email Address</label>
               <input type="email" required value={form.email} onChange={e => set('email', e.target.value)}
                 placeholder="you@gmail.com" style={inputStyle}
-                onFocus={e => e.target.style.borderColor = '#2563eb'}
+                onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                 onBlur={e => e.target.style.borderColor = '#e2e8f0'}
               />
             </div>
@@ -175,7 +175,7 @@ export default function Signup() {
               <div style={{ position: 'relative' }}>
                 <input type={showPass ? 'text' : 'password'} required value={form.password} onChange={e => set('password', e.target.value)}
                   placeholder="Min 6 chars, starts with capital" style={{ ...inputStyle, paddingRight: 46 }}
-                  onFocus={e => e.target.style.borderColor = '#2563eb'}
+                  onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                   onBlur={e => e.target.style.borderColor = '#e2e8f0'}
                 />
                 <button type="button" onClick={() => setShowPass(v => !v)}
@@ -192,7 +192,7 @@ export default function Signup() {
                 <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>Invite Code</label>
                 <input type="text" required value={form.invite_code} onChange={e => set('invite_code', e.target.value)}
                   placeholder="XXXXXXXX (provided by admin)" style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = '#2563eb'}
+                  onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                   onBlur={e => e.target.style.borderColor = '#e2e8f0'}
                 />
                 <p style={{ fontSize: 12, color: '#94a3b8', margin: '6px 0 0' }}>You need an invite code from the admin to join as a mentor.</p>
@@ -202,7 +202,7 @@ export default function Signup() {
             {/* OTP notice */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 16px', margin: '20px 0 24px' }}>
               <span style={{ fontSize: 18 }}>📧</span>
-              <p style={{ fontSize: 13, color: '#1d4ed8', margin: 0 }}>
+              <p style={{ fontSize: 13, color: 'var(--brand-teal-deep)', margin: 0 }}>
                 A <strong>6-digit OTP</strong> will be sent to your email address to verify your account.
               </p>
             </div>
@@ -210,7 +210,7 @@ export default function Signup() {
             <button type="submit" disabled={loading}
               style={{
                 width: '100%', padding: '15px', borderRadius: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-                background: loading ? '#93c5fd' : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+                background: loading ? '#93c5fd' : 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))',
                 color: '#fff', fontSize: 15, fontWeight: 700,
                 boxShadow: loading ? 'none' : '0 6px 20px rgba(37,99,235,0.4)',
               }}>
@@ -226,7 +226,7 @@ export default function Signup() {
 
           <p style={{ textAlign: 'center', fontSize: 14, color: '#64748b' }}>
             Already have an account?{' '}
-            <Link to={`/login/${role.toLowerCase()}`} style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+            <Link to={`/login/${role.toLowerCase()}`} style={{ color: 'var(--brand-teal-deep)', fontWeight: 700, textDecoration: 'none' }}>
               Sign in
             </Link>
           </p>
