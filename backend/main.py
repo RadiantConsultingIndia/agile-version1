@@ -8,7 +8,7 @@ import random
 import threading
 from datetime import datetime, timezone, timedelta
 
-from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form, Request
+from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -1377,6 +1377,14 @@ def mentee_dashboard(current_user: User = Depends(require_mentee), db: Session =
             for a in att_records
         ],
     }
+
+@app.get("/api/public/programs")
+def public_programs(response: Response, db: Session = Depends(get_db)):
+    """Unauthenticated, minimal-field program list for the public marketing site's program recommender."""
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    programs = db.query(Program).filter(Program.status == "active").all()
+    return [{"title": p.title, "description": p.description,
+             "category": p.category, "duration_weeks": p.duration_weeks} for p in programs]
 
 @app.get("/api/programs")
 def get_programs(current_user: User = Depends(require_user), db: Session = Depends(get_db)):

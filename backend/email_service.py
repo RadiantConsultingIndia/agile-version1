@@ -6,12 +6,13 @@ import os
 load_dotenv()
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "AgileMentor <onboarding@resend.dev>")
 
 
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
     try:
         payload = json.dumps({
-            "from": "AgileMentor <onboarding@resend.dev>",
+            "from": RESEND_FROM_EMAIL,
             "to": [to_email],
             "subject": subject,
             "html": html_body,
