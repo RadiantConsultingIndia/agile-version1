@@ -9,7 +9,7 @@ const PROGRAMS = [
     desc: 'Master sprint planning, retrospectives, and team facilitation. Go from Agile basics to leading high-performing Scrum teams.',
     topics: ['Sprint Planning', 'User Stories', 'Retrospectives'],
     weeks: 8, enrolled: 240, rating: 4.9,
-    headerColors: ['#1d4ed8', '#4f46e5'],
+    headerColors: ['var(--brand-navy-deep)', '#4f46e5'],
     emoji: '⚡',
   },
   {
@@ -52,6 +52,110 @@ function StarRating({ rating, reviews }) {
   )
 }
 
+/* ── Program Finder quiz ────────────────────────────────── */
+const FINDER_TRACKS = [
+  { id: 'agile-scrum', label: 'Agile & Scrum Mastery', keywords: ['agile', 'scrum'],
+    pitch: 'Master sprint planning, retrospectives, and team facilitation.' },
+  { id: 'product', label: 'Product Management', keywords: ['product', 'roadmap', 'okr'],
+    pitch: 'Learn to define vision, prioritize backlogs, and ship features users love.' },
+  { id: 'mentorship', label: '1:1 Mentorship', keywords: ['mentor'],
+    pitch: 'Ongoing guidance from an industry mentor, matched to your goals.' },
+  { id: 'interview', label: 'Interview Prep', keywords: ['interview'],
+    pitch: 'Practice with mock interviews and structured feedback.' },
+]
+
+const FINDER_QUESTION = {
+  text: 'What are you looking for right now?',
+  options: [
+    { label: 'Agile & Scrum fundamentals', trackId: 'agile-scrum' },
+    { label: 'Product management skills', trackId: 'product' },
+    { label: '1:1 mentor guidance', trackId: 'mentorship' },
+    { label: 'Interview practice', trackId: 'interview' },
+  ],
+}
+
+function bucketTrackId(program) {
+  const haystack = `${program.category || ''} ${program.title || ''}`.toLowerCase()
+  for (const track of FINDER_TRACKS) {
+    if (track.keywords.some(kw => haystack.includes(kw))) return track.id
+  }
+  return 'agile-scrum'
+}
+
+function ProgramFinder() {
+  const [trackId, setTrackId] = useState(null)
+  const [liveByTrack, setLiveByTrack] = useState({})
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3000)
+    fetch('https://agile-mentorship-backend.onrender.com/api/public/programs', { signal: controller.signal })
+      .then(res => { if (!res.ok) throw new Error('bad status'); return res.json() })
+      .then(programs => {
+        const byTrack = {}
+        programs.forEach(p => {
+          const id = bucketTrackId(p)
+          byTrack[id] = byTrack[id] || []
+          byTrack[id].push(p)
+        })
+        setLiveByTrack(byTrack)
+      })
+      .catch(() => {}) // live data optional — static recommendation still works without it
+      .finally(() => clearTimeout(timeout))
+    return () => { clearTimeout(timeout); controller.abort() }
+  }, [])
+
+  const track = FINDER_TRACKS.find(t => t.id === trackId)
+  const liveList = (trackId && liveByTrack[trackId]) ? liveByTrack[trackId].slice(0, 3) : []
+
+  return (
+    <section style={{ background: '#f8fafc', padding: '80px 32px' }}>
+      <div style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-teal-deep)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Not Sure Where to Start?</span>
+        <h2 style={{ fontSize: 30, fontWeight: 800, color: '#0f172a', margin: '10px 0 32px' }}>Find the right program for you.</h2>
+
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.06)', padding: '36px 40px' }}>
+          {!track ? (
+            <>
+              <p style={{ fontSize: 17, fontWeight: 600, color: '#0f172a', marginBottom: 20, textAlign: 'center' }}>{FINDER_QUESTION.text}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {FINDER_QUESTION.options.map(opt => (
+                  <button key={opt.trackId} onClick={() => setTrackId(opt.trackId)}
+                    style={{ textAlign: 'left', fontSize: 14.5, fontWeight: 600, color: '#0f172a', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', cursor: 'pointer' }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ display: 'inline-block', fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--brand-teal-deep)', background: 'rgba(20,184,166,0.12)', padding: '5px 14px', borderRadius: 999, marginBottom: 14 }}>Recommended for you</span>
+              <h3 style={{ fontSize: 21, marginBottom: 10 }}>{track.label}</h3>
+              <p style={{ color: '#64748b', fontSize: 14.5, marginBottom: 22 }}>{track.pitch}</p>
+
+              {liveList.length > 0 && (
+                <ul style={{ listStyle: 'none', textAlign: 'left', margin: '0 0 24px', padding: 0 }}>
+                  {liveList.map(p => (
+                    <li key={p.title} style={{ fontSize: 13.5, color: '#1f2937', background: '#f8fafc', borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                      {p.title}
+                      {p.duration_weeks ? <span style={{ color: '#64748b', fontSize: 12.5 }}>{p.duration_weeks} wks</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <a href="/signup/mentee" style={{ background: 'var(--brand-navy)', color: '#fff', fontSize: 14, fontWeight: 700, padding: '12px 24px', borderRadius: 10, textDecoration: 'none' }}>Get Started</a>
+                <button onClick={() => setTrackId(null)} style={{ background: 'none', border: 'none', fontSize: 13.5, fontWeight: 600, color: '#64748b', cursor: 'pointer' }}>Start over</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 /* ── Page ───────────────────────────────────────────────── */
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -74,14 +178,14 @@ export default function Home() {
 
           {/* Logo */}
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#2563eb,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(37,99,235,0.35)' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,var(--brand-navy),#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(37,99,235,0.35)' }}>
               <svg viewBox="0 0 32 28" width="22" height="22" fill="none">
                 <path d="M2 18 Q6 4 12 14 Q16 20 20 8 Q24 0 30 12" stroke="white" strokeWidth="3" strokeLinecap="round" fill="none"/>
               </svg>
             </div>
             <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.5px' }}>
               <span style={{ color: '#0f172a' }}>Agile</span>
-              <span style={{ color: '#2563eb' }}>Mentor</span>
+              <span style={{ color: 'var(--brand-teal-deep)' }}>Mentor</span>
             </span>
           </Link>
 
@@ -98,7 +202,7 @@ export default function Home() {
           {/* Desktop actions */}
           <div className="am-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 16, marginLeft: 'auto' }}>
             <Link to="/login/mentee" style={{ fontSize: 14, fontWeight: 600, color: '#374151', textDecoration: 'none' }}>Login</Link>
-            <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 700, color: '#fff', textDecoration: 'none', background: 'linear-gradient(135deg,#2563eb,#4338ca)', padding: '9px 22px', borderRadius: 50, boxShadow: '0 4px 14px rgba(37,99,235,0.4)' }}>
+            <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 700, color: '#fff', textDecoration: 'none', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', padding: '9px 22px', borderRadius: 50, boxShadow: '0 4px 14px rgba(37,99,235,0.4)' }}>
               Get Started
             </Link>
           </div>
@@ -128,14 +232,14 @@ export default function Home() {
             Login
           </Link>
           <Link to="/signup/mentee" onClick={() => setMenuOpen(false)} className="am-mob-cta"
-            style={{ fontSize: 15, fontWeight: 700, color: '#fff', textDecoration: 'none', padding: '12px', display: 'block', background: 'linear-gradient(135deg,#2563eb,#4338ca)', borderRadius: 10, textAlign: 'center', marginTop: 4 }}>
+            style={{ fontSize: 15, fontWeight: 700, color: '#fff', textDecoration: 'none', padding: '12px', display: 'block', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', borderRadius: 10, textAlign: 'center', marginTop: 4 }}>
             Get Started Free
           </Link>
         </div>
       </nav>
 
       {/* ════ HERO ════ */}
-      <section id="home" style={{ background: 'linear-gradient(160deg, #0c1a3d 0%, #0f2356 60%, #0c1a3d 100%)', position: 'relative', overflow: 'hidden' }}>
+      <section id="home" style={{ background: 'linear-gradient(160deg, var(--brand-navy-deep) 0%, var(--brand-navy) 60%, var(--brand-navy-deep) 100%)', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -100, right: -100, width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.15), transparent 70%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: -80, left: '30%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.1), transparent 70%)', pointerEvents: 'none' }} />
 
@@ -159,7 +263,7 @@ export default function Home() {
             </p>
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <a href="#programs" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg,#2563eb,#4338ca)', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px 28px', borderRadius: 10, textDecoration: 'none', boxShadow: '0 6px 20px rgba(37,99,235,0.45)' }}>
+              <a href="#programs" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px 28px', borderRadius: 10, textDecoration: 'none', boxShadow: '0 6px 20px rgba(37,99,235,0.45)' }}>
                 Explore Programs →
               </a>
               <Link to="/signup/mentor" style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: 14, fontWeight: 600, padding: '13px 28px', borderRadius: 10, textDecoration: 'none' }}>
@@ -209,17 +313,19 @@ export default function Home() {
         </div>
       </section>
 
+      <ProgramFinder />
+
       {/* ════ PROGRAMS ════ */}
       <section id="programs" className="am-section-pad" style={{ background: '#fff', padding: '96px 0' }}>
         <div className="am-section-inner" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px' }}>
           <div className="am-section-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 52 }}>
             <div>
               <h2 style={{ fontSize: 36, fontWeight: 800, color: '#0f172a', margin: '0 0 10px', letterSpacing: '-0.5px' }}>
-                Explore Top <span style={{ color: '#2563eb' }}>Programs</span>
+                Explore Top <span style={{ color: 'var(--brand-teal-deep)' }}>Programs</span>
               </h2>
               <p style={{ fontSize: 16, color: '#64748b', margin: 0 }}>Structured learning paths built by practitioners — from fundamentals to job-ready skills</p>
             </div>
-            <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 600, color: '#2563eb', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-teal-deep)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
               View all programs →
             </Link>
           </div>
@@ -260,7 +366,7 @@ export default function Home() {
                     <span>⭐ {p.rating}</span>
                   </div>
 
-                  <Link to="/signup/mentee" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', background: 'linear-gradient(135deg,#2563eb,#4338ca)', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px', borderRadius: 12, boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}>
+                  <Link to="/signup/mentee" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px', borderRadius: 12, boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}>
                     Enroll Now
                   </Link>
                 </div>
@@ -276,11 +382,11 @@ export default function Home() {
           <div className="am-section-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 52 }}>
             <div>
               <h2 style={{ fontSize: 36, fontWeight: 800, color: '#0f172a', margin: '0 0 10px', letterSpacing: '-0.5px' }}>
-                Meet Our <span style={{ color: '#2563eb' }}>Mentors</span>
+                Meet Our <span style={{ color: 'var(--brand-teal-deep)' }}>Mentors</span>
               </h2>
               <p style={{ fontSize: 16, color: '#64748b', margin: 0 }}>Hand-picked professionals from top companies — real experience, real results</p>
             </div>
-            <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 600, color: '#2563eb', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-teal-deep)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
               View all mentors →
             </Link>
           </div>
@@ -310,7 +416,7 @@ export default function Home() {
 
                   <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>{m.name}</p>
                   <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 12px' }}>
-                    {m.role} · <span style={{ color: '#2563eb', fontWeight: 600 }}>{m.company}</span>
+                    {m.role} · <span style={{ color: 'var(--brand-teal-deep)', fontWeight: 600 }}>{m.company}</span>
                   </p>
 
                   <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, margin: '0 0 18px', flex: 1 }}>{m.bio}</p>
@@ -326,13 +432,13 @@ export default function Home() {
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginBottom: 18 }}>
                     {m.tags.map(t => (
-                      <span key={t} style={{ fontSize: 12, fontWeight: 500, background: '#eff6ff', color: '#2563eb', padding: '4px 10px', borderRadius: 50 }}>{t}</span>
+                      <span key={t} style={{ fontSize: 12, fontWeight: 500, background: '#eff6ff', color: 'var(--brand-teal-deep)', padding: '4px 10px', borderRadius: 50 }}>{t}</span>
                     ))}
                   </div>
 
-                  <Link to="/signup/mentee" style={{ display: 'block', width: '100%', textAlign: 'center', textDecoration: 'none', border: '1.5px solid #bfdbfe', color: '#2563eb', background: 'transparent', fontSize: 13, fontWeight: 600, padding: '10px', borderRadius: 12, transition: 'background 0.15s, color 0.15s', boxSizing: 'border-box' }}
-                    onMouseEnter={e => { e.target.style.background = '#2563eb'; e.target.style.color = '#fff' }}
-                    onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#2563eb' }}>
+                  <Link to="/signup/mentee" style={{ display: 'block', width: '100%', textAlign: 'center', textDecoration: 'none', border: '1.5px solid #bfdbfe', color: 'var(--brand-navy)', background: 'transparent', fontSize: 13, fontWeight: 600, padding: '10px', borderRadius: 12, transition: 'background 0.15s, color 0.15s', boxSizing: 'border-box' }}
+                    onMouseEnter={e => { e.target.style.background = 'var(--brand-teal)'; e.target.style.color = '#fff' }}
+                    onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--brand-navy)' }}>
                     Book Session
                   </Link>
                 </div>
@@ -350,7 +456,7 @@ export default function Home() {
             <p style={{ fontSize: 15, color: '#93c5fd', margin: 0 }}>India's leading platform connecting Agile professionals with the next generation of practitioners.</p>
           </div>
           <div className="am-cta-buttons" style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
-            <Link to="/signup/mentee" style={{ background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px 26px', borderRadius: 10, textDecoration: 'none', boxShadow: '0 4px 14px rgba(37,99,235,0.4)' }}>
+            <Link to="/signup/mentee" style={{ background: 'var(--brand-navy)', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px 26px', borderRadius: 10, textDecoration: 'none', boxShadow: '0 4px 14px rgba(37,99,235,0.4)' }}>
               Start Learning Free
             </Link>
             <Link to="/signup/mentor" style={{ border: '1.5px solid rgba(255,255,255,0.3)', color: '#fff', fontSize: 14, fontWeight: 600, padding: '13px 26px', borderRadius: 10, textDecoration: 'none', background: 'rgba(255,255,255,0.05)' }}>
@@ -366,7 +472,7 @@ export default function Home() {
           <div className="am-footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr', gap: 48, marginBottom: 52 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#2563eb,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,var(--brand-navy),#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg viewBox="0 0 32 28" width="20" height="20" fill="none">
                     <path d="M2 18 Q6 4 12 14 Q16 20 20 8 Q24 0 30 12" stroke="white" strokeWidth="3" strokeLinecap="round" fill="none"/>
                   </svg>
