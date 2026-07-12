@@ -1,5 +1,6 @@
 APScheduler==3.10.4
 slowapi==0.1.10
+anthropic
 aiohappyeyeballs==2.6.2
 aiohttp==3.14.1
 aiosignal==1.4.0
