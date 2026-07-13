@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import NotificationBell from '../../components/NotificationBell'
 
@@ -87,7 +87,7 @@ export default function MenteeLayout({ children }) {
         {/* Logo */}
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }} title="Go to Home">
               <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg,#7c3aed,#a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(124,58,237,0.4)' }}>
                 <svg viewBox="0 0 32 28" width="18" height="18" fill="none">
                   <path d="M2 18 Q6 4 12 14 Q16 20 20 8 Q24 0 30 12" stroke="white" strokeWidth="3" strokeLinecap="round"/>
@@ -97,7 +97,7 @@ export default function MenteeLayout({ children }) {
                 <span style={{ color: '#fff' }}>Agile</span>
                 <span style={{ color: '#c4b5fd' }}>Mentor</span>
               </span>
-            </div>
+            </Link>
             {isMobile && (
               <button onClick={() => setSidebarOpen(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4, display: 'flex', alignItems: 'center' }}>
