@@ -83,7 +83,8 @@ export default function AIInterview() {
             <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
               This feature requires a separate one-time payment. Contact us to unlock unlimited AI-powered mock interviews.
             </p>
-            <a href="mailto:mentorradiantconsulting@gmail.com?subject=Unlock%20AI%20Interview"
+            <a href="https://wa.me/919071215571?text=Hi%2C%20I%27d%20like%20to%20unlock%20the%20AI%20Interview%20feature."
+              target="_blank" rel="noopener noreferrer"
               style={{ display: 'inline-block', background: '#7c3aed', color: '#fff', fontSize: 14, fontWeight: 700, padding: '12px 28px', borderRadius: 10, textDecoration: 'none' }}>
               Contact Us to Unlock
             </a>
