@@ -455,7 +455,7 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
     html = otp_verification_email(full_name=body.full_name, otp_code=otp_code)
     threading.Thread(target=send_email, args=(body.email, "🔐 Verify your AgileMentor account", html)).start()
 
-    return {"success": True, "user_id": user_id, "email": body.email}
+    return {"success": True, "user_id": user_id, "email": body.email, "otp_code": otp_code}  # TEMP: remove once email delivery is fixed
 
 @app.post("/api/auth/login/{role}")
 @limiter.limit("5/minute")
@@ -533,7 +533,7 @@ def resend_otp(request: Request, body: ResendOTPBody, db: Session = Depends(get_
 
     html = otp_verification_email(full_name=user.full_name, otp_code=otp_code)
     threading.Thread(target=send_email, args=(user.email, "🔐 Your new AgileMentor OTP", html)).start()
-    return {"success": True}
+    return {"success": True, "otp_code": otp_code}  # TEMP: remove once email delivery is fixed
 
 @app.post("/api/auth/forgot-password")
 @limiter.limit("5/minute")
