@@ -31,6 +31,16 @@ export default function AdminUsers() {
     }
   }
 
+  const toggleAiInterviewAccess = async u => {
+    const next = !u.ai_interview_access
+    try {
+      await api.post(`/api/admin/users/${u.user_id}/ai-interview-access?has_access=${next}`)
+      setUsers(list => list.map(x => x.user_id === u.user_id ? { ...x, ai_interview_access: next } : x))
+    } catch (err) {
+      toast(err.response?.data?.detail || 'Failed to update AI Interview access')
+    }
+  }
+
   const handleInvite = async e => {
     e.preventDefault(); setInviteError(''); setInviteCode(''); setInviting(true)
     try {
@@ -126,14 +136,14 @@ export default function AdminUsers() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8fafc' }}>
-              {['User','Email','Role','Status','Joined','Actions'].map(h => (
+              {['User','Email','Role','Status','AI Interview','Joined','Actions'].map(h => (
                 <th key={h} style={{ textAlign: 'left', padding: '12px 20px', fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>No users found</td></tr>
+              <tr><td colSpan={7} style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>No users found</td></tr>
             ) : filtered.map((u, i) => {
               const rs = ROLE_STYLE[u.role] || { bg: '#f8fafc', color: '#64748b', label: u.role }
               return (
@@ -158,6 +168,17 @@ export default function AdminUsers() {
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 50, background: u.status === 'active' ? '#f0fdf4' : '#fffbeb', color: u.status === 'active' ? '#15803d' : '#92400e' }}>
                       {u.status}
                     </span>
+                  </td>
+                  <td style={{ padding: '14px 20px' }}>
+                    {u.role === 'mentee' ? (
+                      <button onClick={() => toggleAiInterviewAccess(u)}
+                        style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 50, border: 'none', cursor: 'pointer',
+                          background: u.ai_interview_access ? '#f0fdf4' : '#f8fafc', color: u.ai_interview_access ? '#15803d' : '#94a3b8' }}>
+                        {u.ai_interview_access ? 'Unlocked' : 'Locked'}
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 12, color: '#cbd5e1' }}>—</span>
+                    )}
                   </td>
                   <td style={{ padding: '14px 20px', fontSize: 12, color: '#94a3b8' }}>
                     {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
