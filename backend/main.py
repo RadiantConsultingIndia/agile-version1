@@ -428,12 +428,12 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid email. Use gmail.com, yahoo.com, ac.in etc.")
     if not validate_password(body.password):
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters and start with a capital letter")
-    if db.query(User).filter(User.email == body.email).first():
+    if db.query(User).filter(func.lower(User.email) == body.email.lower()).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user_id = generate_user_id(db)
     user = User(
-        user_id=user_id, full_name=body.full_name, email=body.email,
+        user_id=user_id, full_name=body.full_name, email=body.email.lower(),
         password_hash=hash_password(body.password), role=role.lower(), status="unverified"
     )
     db.add(user)
@@ -454,7 +454,7 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
 def login(role: str, request: Request, body: LoginBody, db: Session = Depends(get_db)):
     if not validate_email(body.email):
         raise HTTPException(status_code=400, detail="Invalid email")
-    user = db.query(User).filter(User.email == body.email).first()
+    user = db.query(User).filter(func.lower(User.email) == body.email.lower()).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.role != role.lower():
@@ -529,7 +529,7 @@ def resend_otp(request: Request, body: ResendOTPBody, db: Session = Depends(get_
 @app.post("/api/auth/forgot-password")
 @limiter.limit("5/minute")
 def forgot_password(request: Request, body: ForgotPasswordBody, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == body.email).first()
+    user = db.query(User).filter(func.lower(User.email) == body.email.lower()).first()
     if user:
         db.query(PasswordResetToken).filter(
             PasswordResetToken.user_id == user.user_id,
