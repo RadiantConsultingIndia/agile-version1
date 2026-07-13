@@ -413,17 +413,6 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
     if role.lower() == "admin":
         raise HTTPException(status_code=403, detail="Admin accounts cannot be created publicly.")
 
-    if role == "mentor":
-        if not body.invite_code:
-            raise HTTPException(status_code=400, detail="Invite code is required for mentor signup")
-        invite = db.query(MentorInvite).filter(
-            MentorInvite.invite_code == body.invite_code.upper(),
-            MentorInvite.is_used == False,
-            or_(MentorInvite.expires_at == None, MentorInvite.expires_at > datetime.now(timezone.utc))
-        ).first()
-        if not invite:
-            raise HTTPException(status_code=400, detail="Invalid, already used, or expired invite code")
-
     if not validate_email(body.email):
         raise HTTPException(status_code=400, detail="Invalid email. Use gmail.com, yahoo.com, ac.in etc.")
     if not validate_password(body.password):
@@ -442,8 +431,6 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
     if role == "mentor":
         mentor = Mentor(mentor_profile_id=generate_mentor_id(db), user_id=user_id)
         db.add(mentor)
-        invite.is_used = True
-        invite.used_by = user_id
 
     db.commit()
 
