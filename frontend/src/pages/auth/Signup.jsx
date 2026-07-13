@@ -20,7 +20,7 @@ const LEFT_CONTENT = {
     headline: 'Share your expertise,\ngrow your impact.',
     sub: 'Guide the next generation of Agile professionals and build your personal brand.',
     cards: [
-      { emoji: '💼', label: 'Invite-Only Platform', sub: 'Curated community of top professionals' },
+      { emoji: '✅', label: 'Reviewed by Our Team', sub: 'Every mentor is approved before going live' },
       { emoji: '🤝', label: 'Flexible Scheduling', sub: 'Mentor on your own terms' },
       { emoji: '⭐', label: 'Build Your Profile', sub: 'Get reviews and recognition' },
     ],
@@ -83,7 +83,7 @@ export default function Signup() {
   const { role: paramRole } = useParams()
   const initRole = ROLES.find(r => r.toLowerCase() === paramRole) || 'Mentee'
   const [role, setRole] = useState(initRole)
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', invite_code: '' })
+  const [form, setForm] = useState({ full_name: '', email: '', password: '' })
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -99,7 +99,6 @@ export default function Signup() {
     setLoading(true)
     try {
       const payload = { full_name: form.full_name, email: form.email, password: form.password }
-      if (role === 'Mentor') payload.invite_code = form.invite_code
       await api.post(`/api/auth/signup/${role.toLowerCase()}`, payload)
       navigate(`/login/${role.toLowerCase()}?pending=1`)
     } catch (err) {
@@ -185,19 +184,6 @@ export default function Signup() {
               </div>
               <p style={{ fontSize: 12, color: '#94a3b8', margin: '6px 0 0' }}>Must start with a capital letter, min 6 characters.</p>
             </div>
-
-            {/* Invite code (mentor only) */}
-            {role === 'Mentor' && (
-              <div style={{ marginBottom: 10 }}>
-                <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>Invite Code</label>
-                <input type="text" required value={form.invite_code} onChange={e => set('invite_code', e.target.value)}
-                  placeholder="XXXXXXXX (provided by admin)" style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
-                  onBlur={e => e.target.style.borderColor = '#e2e8f0'}
-                />
-                <p style={{ fontSize: 12, color: '#94a3b8', margin: '6px 0 0' }}>You need an invite code from the admin to join as a mentor.</p>
-              </div>
-            )}
 
             {/* Approval notice */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 16px', margin: '20px 0 24px' }}>
