@@ -10,7 +10,14 @@ export default function AIInterview() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [started, setStarted] = useState(false)
+  const [hasAccess, setHasAccess] = useState(null) // null = checking, true/false = resolved
   const transcriptRef = useRef(null)
+
+  useEffect(() => {
+    api.get('/api/mentee/ai-interview/access')
+      .then(res => setHasAccess(res.data.has_access))
+      .catch(() => setHasAccess(false))
+  }, [])
 
   useEffect(() => {
     if (transcriptRef.current) {
@@ -67,7 +74,21 @@ export default function AIInterview() {
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.06)', padding: 28, maxWidth: 720, margin: '0 auto' }}>
-        {!started ? (
+        {hasAccess === null ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 14 }}>Checking access…</div>
+        ) : hasAccess === false ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 14 }}>🔒</div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>AI Interview is a paid add-on</h2>
+            <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
+              This feature requires a separate one-time payment. Contact us to unlock unlimited AI-powered mock interviews.
+            </p>
+            <a href="mailto:mentorradiantconsulting@gmail.com?subject=Unlock%20AI%20Interview"
+              style={{ display: 'inline-block', background: '#7c3aed', color: '#fff', fontSize: 14, fontWeight: 700, padding: '12px 28px', borderRadius: 10, textDecoration: 'none' }}>
+              Contact Us to Unlock
+            </a>
+          </div>
+        ) : !started ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40, marginBottom: 14 }}>🎤</div>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>Ready when you are</h2>
