@@ -408,6 +408,22 @@ def get_me(current_user: User = Depends(require_user)):
         "profile_photo": current_user.profile_photo,
     }
 
+# TEMP: one-time admin bootstrap, remove this route after use
+@app.get("/api/temp-create-admin")
+def temp_create_admin(key: str, db: Session = Depends(get_db)):
+    if key != "rc-temp-bootstrap-9f3a1":
+        raise HTTPException(status_code=404)
+    if db.query(User).filter(User.email == "Radiantconsulting1605@gmail.com").first():
+        return {"success": False, "detail": "Admin already exists"}
+    user_id = generate_user_id(db)
+    user = User(
+        user_id=user_id, full_name="Admin", email="Radiantconsulting1605@gmail.com",
+        password_hash=hash_password("Radiant@12345"), role="admin", status="active"
+    )
+    db.add(user)
+    db.commit()
+    return {"success": True, "user_id": user_id}
+
 @app.post("/api/auth/signup/{role}")
 def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
     if role.lower() == "admin":
