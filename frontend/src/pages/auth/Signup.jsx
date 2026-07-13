@@ -100,8 +100,8 @@ export default function Signup() {
     try {
       const payload = { full_name: form.full_name, email: form.email, password: form.password }
       if (role === 'Mentor') payload.invite_code = form.invite_code
-      const res = await api.post(`/api/auth/signup/${role.toLowerCase()}`, payload)
-      navigate(`/verify-email?user_id=${res.data.user_id}&email=${encodeURIComponent(res.data.email)}`)
+      await api.post(`/api/auth/signup/${role.toLowerCase()}`, payload)
+      navigate(`/login/${role.toLowerCase()}?pending=1`)
     } catch (err) {
       setError(err.response?.data?.detail || 'Signup failed. Please try again.')
     } finally {
@@ -152,7 +152,7 @@ export default function Signup() {
             {/* Full name */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>Full Name</label>
-              <input type="text" required value={form.full_name} onChange={e => set('full_name', e.target.value)}
+              <input type="text" name="name" autoComplete="name" required value={form.full_name} onChange={e => set('full_name', e.target.value)}
                 placeholder="Jane Smith" style={inputStyle}
                 onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                 onBlur={e => e.target.style.borderColor = '#e2e8f0'}
@@ -162,7 +162,7 @@ export default function Signup() {
             {/* Email */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>Email Address</label>
-              <input type="email" required value={form.email} onChange={e => set('email', e.target.value)}
+              <input type="email" name="email" autoComplete="username" required value={form.email} onChange={e => set('email', e.target.value)}
                 placeholder="you@gmail.com" style={inputStyle}
                 onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                 onBlur={e => e.target.style.borderColor = '#e2e8f0'}
@@ -173,7 +173,7 @@ export default function Signup() {
             <div style={{ marginBottom: role === 'Mentor' ? 16 : 10 }}>
               <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>Password</label>
               <div style={{ position: 'relative' }}>
-                <input type={showPass ? 'text' : 'password'} required value={form.password} onChange={e => set('password', e.target.value)}
+                <input type={showPass ? 'text' : 'password'} name="new-password" autoComplete="new-password" required value={form.password} onChange={e => set('password', e.target.value)}
                   placeholder="Min 6 chars, starts with capital" style={{ ...inputStyle, paddingRight: 46 }}
                   onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
                   onBlur={e => e.target.style.borderColor = '#e2e8f0'}

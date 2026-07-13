@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
 const ROLES = ['Mentee', 'Mentor', 'Admin']
@@ -21,13 +21,14 @@ const S = {
 
 export default function Login() {
   const { role: paramRole } = useParams()
+  const [searchParams] = useSearchParams()
   const initRole = ROLES.find(r => r.toLowerCase() === paramRole) || 'Mentee'
   const [role, setRole] = useState(initRole)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
-  const [unverified, setUnverified] = useState(null)
+  const [pendingApproval, setPendingApproval] = useState(searchParams.get('pending') === '1')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -41,11 +42,8 @@ export default function Login() {
       navigate(`/${user.role}/dashboard`)
     } catch (err) {
       const detail = err.response?.data?.detail || 'Invalid credentials. Please try again.'
-      if (detail.includes('verify your email')) {
-        setUnverified({
-          userId: err.response?.headers?.['x-user-id'],
-          email: err.response?.headers?.['x-user-email'] || email,
-        })
+      if (detail.includes('pending admin approval')) {
+        setPendingApproval(true)
       } else {
         setError(detail)
       }
@@ -54,7 +52,7 @@ export default function Login() {
     }
   }
 
-  if (unverified) {
+  if (pendingApproval) {
     return (
       <div className="am-auth-page" style={S.page}>
         <TopBar />
@@ -62,18 +60,15 @@ export default function Login() {
           <LeftPanel />
           <div className="am-auth-right" style={S.right}>
             <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
-              <div style={{ fontSize: 56, marginBottom: 20 }}>📬</div>
-              <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Verify your email</h2>
+              <div style={{ fontSize: 56, marginBottom: 20 }}>⏳</div>
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Pending approval</h2>
               <p style={{ color: '#64748b', fontSize: 14, marginBottom: 32 }}>
-                Your account isn't verified yet. Click below to enter your OTP.
+                Your account has been created and is waiting on admin approval. We'll notify you once you can log in.
               </p>
-              <Link to={`/verify-email?user_id=${unverified.userId}&email=${encodeURIComponent(unverified.email)}`}
-                style={{ display: 'inline-block', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontWeight: 700, fontSize: 14, padding: '13px 32px', borderRadius: 12, textDecoration: 'none' }}>
-                Enter OTP →
-              </Link>
-              <p style={{ marginTop: 20, fontSize: 14, color: '#64748b' }}>
-                <button onClick={() => setUnverified(null)} style={{ background: 'none', border: 'none', color: 'var(--brand-teal-deep)', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>← Back to login</button>
-              </p>
+              <button onClick={() => setPendingApproval(false)}
+                style={{ background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontWeight: 700, fontSize: 14, padding: '13px 32px', borderRadius: 12, border: 'none', cursor: 'pointer' }}>
+                ← Back to login
+              </button>
             </div>
           </div>
         </div>
@@ -127,7 +122,7 @@ export default function Login() {
               <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 7 }}>
                 Email Address
               </label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              <input type="email" name="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required
                 placeholder="you@gmail.com"
                 style={{ width: '100%', padding: '13px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
                 onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
@@ -141,7 +136,7 @@ export default function Login() {
                 Password
               </label>
               <div style={{ position: 'relative' }}>
-                <input type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required
+                <input type={showPass ? 'text' : 'password'} name="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required
                   placeholder="Enter your password"
                   style={{ width: '100%', padding: '13px 46px 13px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fafafa' }}
                   onFocus={e => e.target.style.borderColor = 'var(--brand-teal)'}
