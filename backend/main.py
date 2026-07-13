@@ -39,6 +39,7 @@ from models.feedback import Feedback
 from models.resource import Resource
 from models.email_otp import EmailOTP
 from models.notification import Notification
+from models.ai_interview_access import AIInterviewAccess
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
@@ -620,9 +621,25 @@ def generate_invite(body: GenerateInviteBody, current_user: User = Depends(requi
 @app.get("/api/admin/users")
 def admin_get_users(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     users = db.query(User).filter(User.role != "admin").all()
+    access_by_user = {a.user_id: a.has_access for a in db.query(AIInterviewAccess).all()}
     return [{"user_id": u.user_id, "full_name": u.full_name, "email": u.email,
              "role": u.role, "status": u.status, "created_at": str(u.created_at),
-             "profile_photo": u.profile_photo} for u in users]
+             "profile_photo": u.profile_photo,
+             "ai_interview_access": access_by_user.get(u.user_id, False)} for u in users]
+
+@app.post("/api/admin/users/{user_id}/ai-interview-access")
+def admin_set_ai_interview_access(user_id: str, has_access: bool, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.user_id == user_id, User.role == "mentee").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Mentee not found")
+    access = db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == user_id).first()
+    if access:
+        access.has_access = has_access
+    else:
+        access = AIInterviewAccess(user_id=user_id, has_access=has_access)
+        db.add(access)
+    db.commit()
+    return {"success": True, "user_id": user_id, "has_access": has_access}
 
 @app.delete("/api/admin/users/{user_id}")
 def admin_delete_user(user_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -651,6 +668,7 @@ def admin_delete_user(user_id: str, current_user: User = Depends(require_admin),
     db.query(EmailOTP).filter(EmailOTP.user_id == user_id).delete()
     db.query(Notification).filter(Notification.user_id == user_id).delete()
     db.query(Resource).filter(Resource.uploaded_by == user_id).delete()
+    db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == user_id).delete()
 
     user = db.query(User).filter(User.user_id == user_id).first()
     if user:
@@ -1415,9 +1433,19 @@ class AIInterviewMessage(BaseModel):
 class AIInterviewBody(BaseModel):
     messages: list[AIInterviewMessage]
 
+def _has_ai_interview_access(user_id: str, db: Session) -> bool:
+    access = db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == user_id).first()
+    return bool(access and access.has_access)
+
+@app.get("/api/mentee/ai-interview/access")
+def ai_interview_access(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    return {"has_access": _has_ai_interview_access(current_user.user_id, db)}
+
 @app.post("/api/mentee/ai-interview/message")
 @limiter.limit("20/minute")
-def ai_interview_message(request: Request, body: AIInterviewBody, current_user: User = Depends(require_mentee)):
+def ai_interview_message(request: Request, body: AIInterviewBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    if not _has_ai_interview_access(current_user.user_id, db):
+        raise HTTPException(status_code=402, detail="AI Interview access requires a separate payment. Please contact us to unlock it.")
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="AI interview isn't configured yet. Please try again later.")
     if not body.messages:

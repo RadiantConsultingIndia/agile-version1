@@ -16,7 +16,8 @@ from models.email_otp import EmailOTP
 from models.feedback import Feedback
 from models.resource import Resource
 from models.notification import Notification
- 
+from models.ai_interview_access import AIInterviewAccess
+
 Base.metadata.create_all(bind=engine)
 
 print("Tables created successfully!")
