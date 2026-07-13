@@ -445,18 +445,9 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
         invite.is_used = True
         invite.used_by = user_id
 
-    otp_code = str(random.randint(100000, 999999))
-    otp = EmailOTP(
-        otp_id=generate_otp_id(db), user_id=user_id, otp_code=otp_code,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
-    )
-    db.add(otp)
     db.commit()
 
-    html = otp_verification_email(full_name=body.full_name, otp_code=otp_code)
-    threading.Thread(target=send_email, args=(body.email, "🔐 Verify your AgileMentor account", html)).start()
-
-    return {"success": True, "user_id": user_id, "email": body.email, "otp_code": otp_code}  # TEMP: remove once email delivery is fixed
+    return {"success": True, "user_id": user_id, "email": body.email}
 
 @app.post("/api/auth/login/{role}")
 @limiter.limit("5/minute")
@@ -471,8 +462,7 @@ def login(role: str, request: Request, body: LoginBody, db: Session = Depends(ge
     if not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid password")
     if user.status == "unverified":
-        raise HTTPException(status_code=403, detail="Please verify your email first",
-                            headers={"X-User-Id": user.user_id, "X-User-Email": user.email})
+        raise HTTPException(status_code=403, detail="Your account is pending admin approval. We'll notify you once it's approved.")
 
     token = create_access_token(data={"user_id": user.user_id, "role": user.role, "email": user.email})
     response = JSONResponse({
@@ -626,6 +616,15 @@ def admin_get_users(current_user: User = Depends(require_admin), db: Session = D
              "role": u.role, "status": u.status, "created_at": str(u.created_at),
              "profile_photo": u.profile_photo,
              "ai_interview_access": access_by_user.get(u.user_id, False)} for u in users]
+
+@app.post("/api/admin/users/{user_id}/approve")
+def admin_approve_user(user_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.status = "active"
+    db.commit()
+    return {"success": True, "user_id": user_id, "status": user.status}
 
 @app.post("/api/admin/users/{user_id}/ai-interview-access")
 def admin_set_ai_interview_access(user_id: str, has_access: bool, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
