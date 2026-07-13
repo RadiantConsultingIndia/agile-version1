@@ -31,6 +31,15 @@ export default function AdminUsers() {
     }
   }
 
+  const handleApprove = async id => {
+    try {
+      await api.post(`/api/admin/users/${id}/approve`)
+      setUsers(list => list.map(x => x.user_id === id ? { ...x, status: 'active' } : x))
+    } catch (err) {
+      toast(err.response?.data?.detail || 'Failed to approve user')
+    }
+  }
+
   const toggleAiInterviewAccess = async u => {
     const next = !u.ai_interview_access
     try {
@@ -166,7 +175,7 @@ export default function AdminUsers() {
                   </td>
                   <td style={{ padding: '14px 20px' }}>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 50, background: u.status === 'active' ? '#f0fdf4' : '#fffbeb', color: u.status === 'active' ? '#15803d' : '#92400e' }}>
-                      {u.status}
+                      {u.status === 'unverified' ? 'Pending' : u.status}
                     </span>
                   </td>
                   <td style={{ padding: '14px 20px' }}>
@@ -184,7 +193,12 @@ export default function AdminUsers() {
                     {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                   </td>
                   <td style={{ padding: '14px 20px' }}>
-                    <button onClick={() => handleDelete(u.user_id)} style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Delete</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      {u.status === 'unverified' && (
+                        <button onClick={() => handleApprove(u.user_id)} style={{ fontSize: 12, fontWeight: 600, color: '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Approve</button>
+                      )}
+                      <button onClick={() => handleDelete(u.user_id)} style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               )
