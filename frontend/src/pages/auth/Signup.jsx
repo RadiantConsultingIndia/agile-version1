@@ -139,7 +139,7 @@ export default function Signup() {
           </h2>
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 28px' }}>
             Signing up as a <span style={{ color: 'var(--brand-teal-deep)', fontWeight: 700 }}>{role}</span>
-            {' '}— an OTP will be sent to verify your email.
+            {' '}— your account will be reviewed and approved by an admin.
           </p>
 
           {error && (
@@ -199,11 +199,11 @@ export default function Signup() {
               </div>
             )}
 
-            {/* OTP notice */}
+            {/* Approval notice */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 16px', margin: '20px 0 24px' }}>
-              <span style={{ fontSize: 18 }}>📧</span>
+              <span style={{ fontSize: 18 }}>⏳</span>
               <p style={{ fontSize: 13, color: 'var(--brand-teal-deep)', margin: 0 }}>
-                A <strong>6-digit OTP</strong> will be sent to your email address to verify your account.
+                Your account will be reviewed by an admin before you can log in.
               </p>
             </div>
 
@@ -214,7 +214,7 @@ export default function Signup() {
                 color: '#fff', fontSize: 15, fontWeight: 700,
                 boxShadow: loading ? 'none' : '0 6px 20px rgba(37,99,235,0.4)',
               }}>
-              {loading ? 'Creating account…' : 'Create Account & Get OTP →'}
+              {loading ? 'Creating account…' : 'Create Account →'}
             </button>
           </form>
 
