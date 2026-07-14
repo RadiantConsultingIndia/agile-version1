@@ -4,6 +4,7 @@ import api from '../../api/client'
 import { toast } from '../../utils/toast'
 
 const KICKOFF_MESSAGE = "Hi, I'm ready to start my mock interview."
+const SENTINEL = '[[INTERVIEW_COMPLETE]]'
 
 function renderFormatted(text) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g)
@@ -22,10 +23,26 @@ export default function AIInterview() {
   const [hasAccess, setHasAccess] = useState(null) // null = checking, true/false = resolved
   const transcriptRef = useRef(null)
 
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768)
+  const [speechSupported] = useState(() => !!(window.SpeechRecognition || window.webkitSpeechRecognition))
+  const [listening, setListening] = useState(false)
+  const [interimText, setInterimText] = useState('')
+  const [micError, setMicError] = useState(null)
+  const [interviewComplete, setInterviewComplete] = useState(false)
+  const [analysis, setAnalysis] = useState(null)
+  const [gettingReport, setGettingReport] = useState(false)
+  const recognitionRef = useRef(null)
+
   useEffect(() => {
     api.get('/api/mentee/ai-interview/access')
       .then(res => setHasAccess(res.data.has_access))
       .catch(() => setHasAccess(false))
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setIsDesktop(window.innerWidth >= 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
   }, [])
 
   useEffect(() => {
@@ -34,11 +51,28 @@ export default function AIInterview() {
     }
   }, [messages, loading])
 
+  useEffect(() => () => {
+    recognitionRef.current?.stop()
+    window.speechSynthesis?.cancel()
+  }, [])
+
+  const speak = (text) => {
+    if (!window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\*\*/g, ''))
+    window.speechSynthesis.speak(utterance)
+  }
+
   const sendToApi = async (nextMessages) => {
     setLoading(true)
     try {
       const res = await api.post('/api/mentee/ai-interview/message', { messages: nextMessages })
-      setMessages([...nextMessages, { role: 'assistant', content: res.data.reply }])
+      const raw = res.data.reply
+      const isComplete = raw.includes(SENTINEL)
+      const displayReply = raw.split(SENTINEL).join('').trim()
+      setMessages([...nextMessages, { role: 'assistant', content: displayReply }])
+      speak(displayReply)
+      if (isComplete) setInterviewComplete(true)
     } catch (e) {
       toast(e.response?.data?.detail || 'The AI interviewer is unavailable right now. Please try again.')
     } finally {
@@ -54,9 +88,14 @@ export default function AIInterview() {
   }
 
   const restart = () => {
+    recognitionRef.current?.stop()
+    window.speechSynthesis?.cancel()
     setStarted(false)
     setMessages([])
     setInput('')
+    setInterviewComplete(false)
+    setAnalysis(null)
+    setMicError(null)
   }
 
   const sendMessage = () => {
@@ -68,10 +107,86 @@ export default function AIInterview() {
     sendToApi(next)
   }
 
+  const endInterviewAndGetReport = () => {
+    if (loading || interviewComplete) return
+    const next = [...messages, { role: 'user', content: 'Please end the interview now and give me your closing summary.' }]
+    setMessages(next)
+    sendToApi(next)
+  }
+
   const handleKeyDown = e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
+    }
+  }
+
+  const startListening = () => {
+    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!Ctor || loading) return
+    const recognition = new Ctor()
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+    recognition.onresult = (e) => {
+      let interim = '', final = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript
+        if (e.results[i].isFinal) final += t
+        else interim += t
+      }
+      if (final) setInput(prev => (prev ? prev + ' ' : '') + final.trim())
+      setInterimText(interim)
+    }
+    recognition.onerror = (e) => {
+      setListening(false)
+      setInterimText('')
+      setMicError(e.error === 'not-allowed' || e.error === 'service-not-allowed'
+        ? 'Microphone access was denied. You can still type your answer below.'
+        : 'Voice input had a problem. You can still type your answer below.')
+    }
+    recognition.onend = () => { setListening(false); setInterimText('') }
+    recognitionRef.current = recognition
+    setMicError(null)
+    recognition.start()
+    setListening(true)
+  }
+
+  const stopListening = () => recognitionRef.current?.stop()
+
+  const getReport = async () => {
+    if (gettingReport) return
+    setGettingReport(true)
+    try {
+      let currentAnalysis = analysis
+      if (!currentAnalysis) {
+        const res = await api.post('/api/mentee/ai-interview/analyze', { messages })
+        currentAnalysis = res.data
+        setAnalysis(currentAnalysis)
+      }
+      const reportRes = await api.post('/api/mentee/ai-interview/report', { analysis: currentAnalysis }, { responseType: 'blob' })
+      const blob = new Blob([reportRes.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'ai-interview-report.pdf'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      let message = 'Could not generate your report. Please try again.'
+      if (e.response?.data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await e.response.data.text())
+          if (parsed.detail) message = parsed.detail
+        } catch { /* keep default message */ }
+      } else if (e.response?.data?.detail) {
+        message = e.response.data.detail
+      }
+      toast(message)
+    } finally {
+      setGettingReport(false)
     }
   }
 
@@ -98,12 +213,20 @@ export default function AIInterview() {
               Contact Us to Unlock
             </a>
           </div>
+        ) : (!isDesktop || !speechSupported) ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 14 }}>💻</div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>Please use a laptop or desktop</h2>
+            <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
+              The AI Interview's voice-guided experience needs a desktop browser like Chrome or Edge. Please switch devices to continue.
+            </p>
+          </div>
         ) : !started ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40, marginBottom: 14 }}>🎤</div>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>Ready when you are</h2>
             <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
-              The interviewer will ask which role you'd like to practice for (Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst), then walk you through a set of real interview questions with a summary at the end.
+              The interviewer will ask which role you'd like to practice for (Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst), then walk you through a set of real interview questions with a summary at the end. Speak your answers using the microphone, or type if you prefer.
             </p>
             <button onClick={startInterview}
               style={{ background: '#7c3aed', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, padding: '12px 28px', borderRadius: 10, cursor: 'pointer' }}>
@@ -133,20 +256,50 @@ export default function AIInterview() {
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
-              <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder="Type your answer…" disabled={loading}
-                style={{ flex: 1, minHeight: 46, maxHeight: 120, resize: 'vertical', padding: '12px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontFamily: 'inherit', fontSize: 14, outline: 'none' }} />
-              <button onClick={sendMessage} disabled={loading || !input.trim()}
-                style={{ background: loading || !input.trim() ? '#c4b5fd' : '#7c3aed', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, padding: '0 20px', borderRadius: 10, cursor: loading || !input.trim() ? 'not-allowed' : 'pointer' }}>
-                Send
-              </button>
-            </div>
-            <div style={{ textAlign: 'center', marginTop: 14 }}>
-              <button onClick={restart} style={{ background: 'none', border: 'none', fontSize: 12.5, fontWeight: 600, color: '#94a3b8', cursor: 'pointer' }}>
-                Start Over
-              </button>
-            </div>
+            {interviewComplete ? (
+              <div style={{ textAlign: 'center', padding: '10px 0' }}>
+                <p style={{ fontSize: 14, color: '#64748b', marginBottom: 14 }}>Interview complete! Get your personalized STAR-analysis report.</p>
+                <button onClick={getReport} disabled={gettingReport}
+                  style={{ background: gettingReport ? '#c4b5fd' : '#7c3aed', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, padding: '12px 28px', borderRadius: 10, cursor: gettingReport ? 'not-allowed' : 'pointer' }}>
+                  {gettingReport ? 'Preparing your report…' : 'Get My Report (PDF)'}
+                </button>
+              </div>
+            ) : (
+              <>
+                {interimText && (
+                  <p style={{ fontSize: 12.5, color: '#94a3b8', fontStyle: 'italic', margin: '0 0 8px' }}>{interimText}</p>
+                )}
+                {micError && (
+                  <p style={{ fontSize: 12.5, color: '#dc2626', margin: '0 0 8px' }}>{micError}</p>
+                )}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" onClick={listening ? stopListening : startListening} disabled={loading}
+                    title={listening ? 'Stop recording' : 'Start recording'}
+                    style={{
+                      width: 46, height: 46, minWidth: 46, borderRadius: 10, border: 'none', flexShrink: 0,
+                      background: listening ? '#ef4444' : '#f1f5f9', color: listening ? '#fff' : '#7c3aed',
+                      fontSize: 18, cursor: loading ? 'not-allowed' : 'pointer',
+                    }}>
+                    {listening ? '⏹' : '🎤'}
+                  </button>
+                  <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+                    placeholder="Type your answer, or use the microphone…" disabled={loading}
+                    style={{ flex: 1, minHeight: 46, maxHeight: 120, resize: 'vertical', padding: '12px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontFamily: 'inherit', fontSize: 14, outline: 'none' }} />
+                  <button onClick={sendMessage} disabled={loading || !input.trim()}
+                    style={{ background: loading || !input.trim() ? '#c4b5fd' : '#7c3aed', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, padding: '0 20px', borderRadius: 10, cursor: loading || !input.trim() ? 'not-allowed' : 'pointer' }}>
+                    Send
+                  </button>
+                </div>
+                <div style={{ textAlign: 'center', marginTop: 14, display: 'flex', justifyContent: 'center', gap: 20 }}>
+                  <button onClick={restart} style={{ background: 'none', border: 'none', fontSize: 12.5, fontWeight: 600, color: '#94a3b8', cursor: 'pointer' }}>
+                    Start Over
+                  </button>
+                  <button onClick={endInterviewAndGetReport} disabled={loading} style={{ background: 'none', border: 'none', fontSize: 12.5, fontWeight: 600, color: '#7c3aed', cursor: loading ? 'not-allowed' : 'pointer' }}>
+                    End Interview & Get Report
+                  </button>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
