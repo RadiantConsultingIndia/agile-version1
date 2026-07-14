@@ -62,6 +62,10 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
 Base.metadata.create_all(bind=engine)
+with engine.connect() as _conn:
+    _conn.execute(text('ALTER TABLE "AIInterviewAccess" ADD COLUMN IF NOT EXISTS credits_remaining INTEGER DEFAULT 0'))
+    _conn.execute(text('UPDATE "AIInterviewAccess" SET credits_remaining = 20 WHERE has_access = true AND credits_remaining = 0'))
+    _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -604,11 +608,11 @@ def generate_invite(body: GenerateInviteBody, current_user: User = Depends(requi
 @app.get("/api/admin/users")
 def admin_get_users(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     users = db.query(User).filter(User.role != "admin").all()
-    access_by_user = {a.user_id: a.has_access for a in db.query(AIInterviewAccess).all()}
+    credits_by_user = {a.user_id: a.credits_remaining for a in db.query(AIInterviewAccess).all()}
     return [{"user_id": u.user_id, "full_name": u.full_name, "email": u.email,
              "role": u.role, "status": u.status, "created_at": str(u.created_at),
              "profile_photo": u.profile_photo,
-             "ai_interview_access": access_by_user.get(u.user_id, False)} for u in users]
+             "ai_interview_credits": credits_by_user.get(u.user_id, 0)} for u in users]
 
 @app.post("/api/admin/users/{user_id}/approve")
 def admin_approve_user(user_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -620,18 +624,21 @@ def admin_approve_user(user_id: str, current_user: User = Depends(require_admin)
     return {"success": True, "user_id": user_id, "status": user.status}
 
 @app.post("/api/admin/users/{user_id}/ai-interview-access")
-def admin_set_ai_interview_access(user_id: str, has_access: bool, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+def admin_set_ai_interview_access(user_id: str, credits: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if credits < 0:
+        raise HTTPException(status_code=400, detail="Credits cannot be negative")
     user = db.query(User).filter(User.user_id == user_id, User.role == "mentee").first()
     if not user:
         raise HTTPException(status_code=404, detail="Mentee not found")
     access = db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == user_id).first()
     if access:
-        access.has_access = has_access
+        access.credits_remaining = credits
+        access.has_access = credits > 0
     else:
-        access = AIInterviewAccess(user_id=user_id, has_access=has_access)
+        access = AIInterviewAccess(user_id=user_id, credits_remaining=credits, has_access=credits > 0)
         db.add(access)
     db.commit()
-    return {"success": True, "user_id": user_id, "has_access": has_access}
+    return {"success": True, "user_id": user_id, "credits_remaining": credits}
 
 @app.delete("/api/admin/users/{user_id}")
 def admin_delete_user(user_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -1425,19 +1432,24 @@ class AIInterviewMessage(BaseModel):
 class AIInterviewBody(BaseModel):
     messages: list[AIInterviewMessage]
 
-def _has_ai_interview_access(user_id: str, db: Session) -> bool:
+def _ai_interview_credits(user_id: str, db: Session) -> int:
     access = db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == user_id).first()
-    return bool(access and access.has_access)
+    return access.credits_remaining if access else 0
+
+def _has_ai_interview_access(user_id: str, db: Session) -> bool:
+    return _ai_interview_credits(user_id, db) > 0
 
 @app.get("/api/mentee/ai-interview/access")
 def ai_interview_access(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
-    return {"has_access": _has_ai_interview_access(current_user.user_id, db)}
+    credits = _ai_interview_credits(current_user.user_id, db)
+    return {"has_access": credits > 0, "credits_remaining": credits}
 
 @app.post("/api/mentee/ai-interview/message")
 @limiter.limit("20/minute")
 def ai_interview_message(request: Request, body: AIInterviewBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
-    if not _has_ai_interview_access(current_user.user_id, db):
-        raise HTTPException(status_code=402, detail="AI Interview access requires a separate payment. Please contact us to unlock it.")
+    access = db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == current_user.user_id).first()
+    if not access or access.credits_remaining <= 0:
+        raise HTTPException(status_code=402, detail="You've used all your AI Interview credits. Please contact us to unlock more.")
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="AI interview isn't configured yet. Please try again later.")
     if not body.messages:
@@ -1455,8 +1467,12 @@ def ai_interview_message(request: Request, body: AIInterviewBody, current_user: 
         print(f"[AI INTERVIEW ERROR] {e}")
         raise HTTPException(status_code=502, detail="The AI interviewer is temporarily unavailable. Please try again.")
 
+    if len(body.messages) == 1:
+        access.credits_remaining -= 1
+        db.commit()
+
     reply = next((b.text for b in response.content if b.type == "text"), "")
-    return {"reply": reply}
+    return {"reply": reply, "credits_remaining": access.credits_remaining}
 
 STAR_ANALYSIS_SYSTEM_PROMPT = """You are an expert interview coach reviewing a completed mock interview transcript for an Agile-industry role. Analyze the candidate's answers and call the submit_interview_analysis tool exactly once with a structured assessment. Focus on STAR structure (Situation, Task, Action, Result) for behavioral answers. Be specific and constructive. Keep every field short — this feeds a 1-page PDF report, not a full transcript reproduction."""
 
