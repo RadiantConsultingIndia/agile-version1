@@ -1522,12 +1522,13 @@ class AIInterviewAnalyzeBody(BaseModel):
 
 class AIInterviewReportBody(BaseModel):
     analysis: InterviewAnalysis
+    paste_detected: bool = False
 
 @app.post("/api/mentee/ai-interview/analyze")
 @limiter.limit("10/minute")
 def ai_interview_analyze(request: Request, body: AIInterviewAnalyzeBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
     if not _has_ai_interview_access(current_user.user_id, db):
-        raise HTTPException(status_code=402, detail="AI Interview access requires a separate payment. Please contact us to unlock it.")
+        raise HTTPException(status_code=402, detail="You've used all your AI Interview credits. Please contact us to unlock more.")
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="AI interview isn't configured yet. Please try again later.")
     if len(body.messages) < 4:
@@ -1557,7 +1558,7 @@ def ai_interview_analyze(request: Request, body: AIInterviewAnalyzeBody, current
     return tool_block.input
 
 
-def _build_interview_report_pdf(candidate_name: str, analysis: InterviewAnalysis) -> bytes:
+def _build_interview_report_pdf(candidate_name: str, analysis: InterviewAnalysis, paste_detected: bool = False) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, topMargin=0.6*inch, bottomMargin=0.6*inch, leftMargin=0.7*inch, rightMargin=0.7*inch)
     styles = getSampleStyleSheet()
@@ -1566,6 +1567,7 @@ def _build_interview_report_pdf(candidate_name: str, analysis: InterviewAnalysis
     meta_style = ParagraphStyle('Meta', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#64748b'), spaceAfter=14)
     h2 = ParagraphStyle('H2', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#1e293b'), spaceBefore=10, spaceAfter=6)
     body = ParagraphStyle('BodyX', parent=styles['Normal'], fontSize=10.5, leading=14)
+    warn_style = ParagraphStyle('WarnX', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor('#b45309'), spaceBefore=10)
 
     def esc(s: str, limit: int = 260) -> str:
         return xml_escape((s or "")[:limit])
@@ -1582,6 +1584,8 @@ def _build_interview_report_pdf(candidate_name: str, analysis: InterviewAnalysis
         Paragraph("STAR Observations", h2),
         ListFlowable([ListItem(Paragraph(f"<b>{esc(n.question, 100)}</b> — {esc(n.star_assessment, 200)}", body)) for n in analysis.star_notes[:4]], bulletType='bullet'),
     ]
+    if paste_detected:
+        story.append(Paragraph("⚠ Note: one or more typed answers in this interview appear to have been pasted in rather than typed live.", warn_style))
     doc.build(story)
     return buf.getvalue()
 
@@ -1590,9 +1594,9 @@ def _build_interview_report_pdf(candidate_name: str, analysis: InterviewAnalysis
 @limiter.limit("10/minute")
 def ai_interview_report(request: Request, body: AIInterviewReportBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
     if not _has_ai_interview_access(current_user.user_id, db):
-        raise HTTPException(status_code=402, detail="AI Interview access requires a separate payment. Please contact us to unlock it.")
+        raise HTTPException(status_code=402, detail="You've used all your AI Interview credits. Please contact us to unlock more.")
 
-    pdf_bytes = _build_interview_report_pdf(current_user.full_name or "Candidate", body.analysis)
+    pdf_bytes = _build_interview_report_pdf(current_user.full_name or "Candidate", body.analysis, body.paste_detected)
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
