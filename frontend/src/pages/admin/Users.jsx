@@ -11,10 +11,6 @@ const ROLE_STYLE = {
 
 export default function AdminUsers() {
   const [users,       setUsers]       = useState([])
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteCode,  setInviteCode]  = useState('')
-  const [inviteError, setInviteError] = useState('')
-  const [inviting,    setInviting]    = useState(false)
   const [search,      setSearch]      = useState('')
 
   useEffect(() => {
@@ -50,15 +46,6 @@ export default function AdminUsers() {
     }
   }
 
-  const handleInvite = async e => {
-    e.preventDefault(); setInviteError(''); setInviteCode(''); setInviting(true)
-    try {
-      const res = await api.post('/api/admin/generate-invite', { mentor_email: inviteEmail })
-      setInviteCode(res.data.invite_code); setInviteEmail('')
-    } catch (err) { setInviteError(err.response?.data?.detail || 'Error generating invite') }
-    finally { setInviting(false) }
-  }
-
   const filtered = users.filter(u =>
     u.full_name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase())
@@ -75,7 +62,7 @@ export default function AdminUsers() {
         <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '0 0 6px', letterSpacing: '-0.5px' }}>
           <span style={{ color: '#059669' }}>Users</span>
         </h1>
-        <p style={{ fontSize: 14, color: '#64748b', margin: 0 }}>Manage all platform users, invite mentors, and control access.</p>
+        <p style={{ fontSize: 14, color: '#64748b', margin: 0 }}>Manage all platform users, approve pending signups, and control access.</p>
       </div>
 
       {/* Summary row */}
@@ -93,38 +80,6 @@ export default function AdminUsers() {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Invite card */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f1f5f9', boxShadow: '0 1px 8px rgba(0,0,0,0.05)', padding: '22px 24px', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>📨</div>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: 0 }}>Invite a Mentor</h2>
-        </div>
-        <form onSubmit={handleInvite} style={{ display: 'flex', gap: 12 }}>
-          <input type="email" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
-            placeholder="mentor@example.com"
-            style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 13, color: '#1e293b', outline: 'none', background: '#fafafa', fontFamily: 'inherit' }}
-            onFocus={e => e.target.style.borderColor = '#059669'}
-            onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
-          <button type="submit" disabled={inviting}
-            style={{ padding: '11px 24px', borderRadius: 10, border: 'none', cursor: inviting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, color: '#fff', background: inviting ? '#6ee7b7' : 'linear-gradient(135deg,#059669,#10b981)', boxShadow: '0 4px 14px rgba(5,150,105,0.35)', whiteSpace: 'nowrap' }}>
-            {inviting ? 'Sending…' : 'Send Invite'}
-          </button>
-        </form>
-        {inviteCode && (
-          <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 16 }}>✅</span>
-            <p style={{ fontSize: 13, color: '#15803d', margin: 0 }}>
-              Invite sent! Code: <span style={{ fontFamily: 'monospace', fontWeight: 800, letterSpacing: '0.1em' }}>{inviteCode}</span>
-            </p>
-          </div>
-        )}
-        {inviteError && (
-          <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca' }}>
-            <p style={{ fontSize: 13, color: '#dc2626', margin: 0 }}>⚠ {inviteError}</p>
-          </div>
-        )}
       </div>
 
       {/* Search */}
