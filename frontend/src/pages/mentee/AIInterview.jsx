@@ -121,6 +121,7 @@ export default function AIInterview() {
     if (loading || interviewComplete) return
     const next = [...messages, { role: 'user', content: 'Please end the interview now and give me your closing summary.' }]
     setMessages(next)
+    setInterviewComplete(true) // manual end — trust the click, don't wait on the AI's sentinel
     sendToApi(next)
   }
 
