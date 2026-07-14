@@ -21,6 +21,7 @@ export default function AIInterview() {
   const [loading, setLoading] = useState(false)
   const [started, setStarted] = useState(false)
   const [hasAccess, setHasAccess] = useState(null) // null = checking, true/false = resolved
+  const [creditsRemaining, setCreditsRemaining] = useState(null)
   const transcriptRef = useRef(null)
 
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768)
@@ -37,7 +38,10 @@ export default function AIInterview() {
 
   useEffect(() => {
     api.get('/api/mentee/ai-interview/access')
-      .then(res => setHasAccess(res.data.has_access))
+      .then(res => {
+        setHasAccess(res.data.has_access)
+        setCreditsRemaining(res.data.credits_remaining)
+      })
       .catch(() => setHasAccess(false))
   }, [])
 
@@ -83,6 +87,7 @@ export default function AIInterview() {
       setMessages([...nextMessages, { role: 'assistant', content: displayReply }])
       speak(displayReply)
       if (isComplete) setInterviewComplete(true)
+      if (typeof res.data.credits_remaining === 'number') setCreditsRemaining(res.data.credits_remaining)
     } catch (e) {
       toast(e.response?.data?.detail || 'The AI interviewer is unavailable right now. Please try again.')
     } finally {
@@ -224,9 +229,13 @@ export default function AIInterview() {
         ) : hasAccess === false ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40, marginBottom: 14 }}>🔒</div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>AI Interview is a paid add-on</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>
+              {creditsRemaining === 0 ? "You're out of AI Interview credits" : 'AI Interview is a paid add-on'}
+            </h2>
             <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
-              This feature requires a separate one-time payment. Contact us to unlock unlimited AI-powered mock interviews.
+              {creditsRemaining === 0
+                ? "You've used all your AI Interview credits. Contact us to get more."
+                : 'This feature requires a separate one-time payment. Contact us to unlock AI-powered mock interviews.'}
             </p>
             <a href="https://wa.me/919071215571?text=Hi%2C%20I%27d%20like%20to%20unlock%20the%20AI%20Interview%20feature."
               target="_blank" rel="noopener noreferrer"
@@ -253,6 +262,11 @@ export default function AIInterview() {
               style={{ background: '#7c3aed', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, padding: '12px 28px', borderRadius: 10, cursor: 'pointer' }}>
               Start Interview
             </button>
+            {typeof creditsRemaining === 'number' && (
+              <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 14 }}>
+                {creditsRemaining} interview{creditsRemaining === 1 ? '' : 's'} remaining
+              </p>
+            )}
           </div>
         ) : (
           <>
