@@ -103,7 +103,7 @@ export default function AIInterview() {
             <div style={{ fontSize: 40, marginBottom: 14 }}>🎤</div>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>Ready when you are</h2>
             <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
-              The interviewer will ask which role you'd like to practice for (SDE, Analyst, or Sales), then walk you through a set of real interview questions with a summary at the end.
+              The interviewer will ask which role you'd like to practice for (Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst), then walk you through a set of real interview questions with a summary at the end.
             </p>
             <button onClick={startInterview}
               style={{ background: '#7c3aed', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, padding: '12px 28px', borderRadius: 10, cursor: 'pointer' }}>
