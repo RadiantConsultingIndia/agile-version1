@@ -31,7 +31,9 @@ export default function AIInterview() {
   const [interviewComplete, setInterviewComplete] = useState(false)
   const [analysis, setAnalysis] = useState(null)
   const [gettingReport, setGettingReport] = useState(false)
+  const [voiceOn, setVoiceOn] = useState(true)
   const recognitionRef = useRef(null)
+  const silenceTimerRef = useRef(null)
 
   useEffect(() => {
     api.get('/api/mentee/ai-interview/access')
@@ -52,15 +54,23 @@ export default function AIInterview() {
   }, [messages, loading])
 
   useEffect(() => () => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
     recognitionRef.current?.stop()
     window.speechSynthesis?.cancel()
   }, [])
 
   const speak = (text) => {
-    if (!window.speechSynthesis) return
+    if (!voiceOn || !window.speechSynthesis) return
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text.replace(/\*\*/g, ''))
     window.speechSynthesis.speak(utterance)
+  }
+
+  const toggleVoice = () => {
+    setVoiceOn(prev => {
+      if (prev) window.speechSynthesis?.cancel()
+      return !prev
+    })
   }
 
   const sendToApi = async (nextMessages) => {
@@ -125,9 +135,13 @@ export default function AIInterview() {
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!Ctor || loading) return
     const recognition = new Ctor()
-    recognition.continuous = false
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = 'en-US'
+    const resetSilenceTimer = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = setTimeout(() => recognition.stop(), 2500)
+    }
     recognition.onresult = (e) => {
       let interim = '', final = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -137,6 +151,7 @@ export default function AIInterview() {
       }
       if (final) setInput(prev => (prev ? prev + ' ' : '') + final.trim())
       setInterimText(interim)
+      resetSilenceTimer()
     }
     recognition.onerror = (e) => {
       setListening(false)
@@ -145,11 +160,16 @@ export default function AIInterview() {
         ? 'Microphone access was denied. You can still type your answer below.'
         : 'Voice input had a problem. You can still type your answer below.')
     }
-    recognition.onend = () => { setListening(false); setInterimText('') }
+    recognition.onend = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+      setListening(false)
+      setInterimText('')
+    }
     recognitionRef.current = recognition
     setMicError(null)
     recognition.start()
     setListening(true)
+    resetSilenceTimer()
   }
 
   const stopListening = () => recognitionRef.current?.stop()
@@ -235,6 +255,12 @@ export default function AIInterview() {
           </div>
         ) : (
           <>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <button type="button" onClick={toggleVoice} title={voiceOn ? 'Mute AI voice' : 'Unmute AI voice'}
+                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: voiceOn ? '#7c3aed' : '#94a3b8' }}>
+                {voiceOn ? '🔊' : '🔇'}
+              </button>
+            </div>
             <div ref={transcriptRef} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxHeight: 440, overflowY: 'auto', marginBottom: 18, paddingRight: 4 }}>
               {messages.map((m, i) => (
                 <div key={i} style={{
