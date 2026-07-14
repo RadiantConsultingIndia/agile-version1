@@ -8,6 +8,12 @@ import random
 import threading
 import anthropic
 from datetime import datetime, timezone, timedelta
+from xml.sax.saxutils import escape as xml_escape
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, ListFlowable, ListItem
+from reportlab.lib import colors
 
 from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -1408,7 +1414,7 @@ AI_INTERVIEW_SYSTEM_PROMPT = """You are an experienced, friendly interviewer con
 
 Step 1: Start with a warm greeting and ask which role they'd like to practice for: Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst. Do this only once, at the very start.
 Step 2: Once they answer, ask 8-10 relevant interview questions one at a time for that role, mixing technical/role-specific questions (e.g. for Scrum Master: sprint ceremonies, velocity, impediment removal; for Product Owner: backlog prioritization, user stories; for Business Analyst: requirements gathering, process mapping; for Project/Program Manager: scope, risk, dependencies, stakeholder alignment) with behavioral questions. After each answer, briefly acknowledge it (a sentence, not a paragraph) and occasionally ask a natural follow-up before moving to the next question.
-Step 3: After the last question, or if the candidate says they want to stop, give a concise, encouraging closing summary: 2-3 specific strengths, 2-3 specific areas to improve, and an overall readiness assessment. End the interview there — do not ask further questions after this.
+Step 3: After the last question, or if the candidate says they want to stop, give a concise, encouraging closing summary: 2-3 specific strengths, 2-3 specific areas to improve, and an overall readiness assessment. End the interview there — do not ask further questions after this. Immediately after the closing summary, on its own with nothing else before or after it, append the exact literal text [[INTERVIEW_COMPLETE]] — this is a hidden marker for the app only; never mention, explain, or reference it to the candidate.
 
 Keep every response conversational and concise, like a real interviewer speaking out loud — not a long written report."""
 
@@ -1451,6 +1457,131 @@ def ai_interview_message(request: Request, body: AIInterviewBody, current_user: 
 
     reply = next((b.text for b in response.content if b.type == "text"), "")
     return {"reply": reply}
+
+STAR_ANALYSIS_SYSTEM_PROMPT = """You are an expert interview coach reviewing a completed mock interview transcript for an Agile-industry role. Analyze the candidate's answers and call the submit_interview_analysis tool exactly once with a structured assessment. Focus on STAR structure (Situation, Task, Action, Result) for behavioral answers. Be specific and constructive. Keep every field short — this feeds a 1-page PDF report, not a full transcript reproduction."""
+
+STAR_ANALYSIS_TOOL = {
+    "name": "submit_interview_analysis",
+    "description": "Submit the structured post-interview analysis: overall readiness, strengths, areas to improve, and STAR-structure observations.",
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "role_practiced": {"type": "string", "description": "The role practiced, e.g. 'Scrum Master'."},
+            "overall_readiness": {"type": "string", "description": "1-2 sentence overall readiness assessment."},
+            "strengths": {"type": "array", "items": {"type": "string"}, "description": "2-3 specific strengths, each one short sentence."},
+            "improvements": {"type": "array", "items": {"type": "string"}, "description": "2-3 specific areas to improve, each one short sentence."},
+            "star_notes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": {"type": "string", "description": "Short paraphrase of the question, under 12 words."},
+                        "star_assessment": {"type": "string", "description": "1 short sentence on STAR-structure quality."},
+                    },
+                    "required": ["question", "star_assessment"],
+                    "additionalProperties": False,
+                },
+                "description": "3-4 STAR observations on the candidate's behavioral answers.",
+            },
+        },
+        "required": ["role_practiced", "overall_readiness", "strengths", "improvements", "star_notes"],
+        "additionalProperties": False,
+    },
+}
+
+class StarNote(BaseModel):
+    question: str
+    star_assessment: str
+
+class InterviewAnalysis(BaseModel):
+    role_practiced: str
+    overall_readiness: str
+    strengths: list[str]
+    improvements: list[str]
+    star_notes: list[StarNote]
+
+class AIInterviewAnalyzeBody(BaseModel):
+    messages: list[AIInterviewMessage]
+
+class AIInterviewReportBody(BaseModel):
+    analysis: InterviewAnalysis
+
+@app.post("/api/mentee/ai-interview/analyze")
+@limiter.limit("10/minute")
+def ai_interview_analyze(request: Request, body: AIInterviewAnalyzeBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    if not _has_ai_interview_access(current_user.user_id, db):
+        raise HTTPException(status_code=402, detail="AI Interview access requires a separate payment. Please contact us to unlock it.")
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="AI interview isn't configured yet. Please try again later.")
+    if len(body.messages) < 4:
+        raise HTTPException(status_code=400, detail="Please answer a few questions before requesting your report.")
+
+    transcript_text = "\n\n".join(f"{m.role.upper()}: {m.content}" for m in body.messages)
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=1024,
+            thinking={"type": "disabled"},
+            system=STAR_ANALYSIS_SYSTEM_PROMPT,
+            tools=[STAR_ANALYSIS_TOOL],
+            tool_choice={"type": "tool", "name": "submit_interview_analysis"},
+            messages=[{"role": "user", "content": transcript_text}],
+        )
+    except anthropic.APIError as e:
+        print(f"[AI INTERVIEW ANALYZE ERROR] {e}")
+        raise HTTPException(status_code=502, detail="Could not generate your analysis. Please try again.")
+
+    tool_block = next((b for b in response.content if b.type == "tool_use"), None)
+    if tool_block is None:
+        raise HTTPException(status_code=502, detail="Could not generate your analysis. Please try again.")
+
+    return tool_block.input
+
+
+def _build_interview_report_pdf(candidate_name: str, analysis: InterviewAnalysis) -> bytes:
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, topMargin=0.6*inch, bottomMargin=0.6*inch, leftMargin=0.7*inch, rightMargin=0.7*inch)
+    styles = getSampleStyleSheet()
+    accent = colors.HexColor("#7c3aed")
+    title_style = ParagraphStyle('TitleX', parent=styles['Title'], textColor=accent, fontSize=20, spaceAfter=2)
+    meta_style = ParagraphStyle('Meta', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#64748b'), spaceAfter=14)
+    h2 = ParagraphStyle('H2', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#1e293b'), spaceBefore=10, spaceAfter=6)
+    body = ParagraphStyle('BodyX', parent=styles['Normal'], fontSize=10.5, leading=14)
+
+    def esc(s: str, limit: int = 260) -> str:
+        return xml_escape((s or "")[:limit])
+
+    story = [
+        Paragraph("AI Mock Interview Report", title_style),
+        Paragraph(f"{esc(candidate_name, 100)} &nbsp;|&nbsp; {esc(analysis.role_practiced, 60)} &nbsp;|&nbsp; {datetime.now().strftime('%B %d, %Y')}", meta_style),
+        Paragraph("Overall Readiness", h2),
+        Paragraph(esc(analysis.overall_readiness, 400), body),
+        Paragraph("Strengths", h2),
+        ListFlowable([ListItem(Paragraph(esc(s), body)) for s in analysis.strengths[:3]], bulletType='bullet'),
+        Paragraph("Areas to Improve", h2),
+        ListFlowable([ListItem(Paragraph(esc(s), body)) for s in analysis.improvements[:3]], bulletType='bullet'),
+        Paragraph("STAR Observations", h2),
+        ListFlowable([ListItem(Paragraph(f"<b>{esc(n.question, 100)}</b> — {esc(n.star_assessment, 200)}", body)) for n in analysis.star_notes[:4]], bulletType='bullet'),
+    ]
+    doc.build(story)
+    return buf.getvalue()
+
+
+@app.post("/api/mentee/ai-interview/report")
+@limiter.limit("10/minute")
+def ai_interview_report(request: Request, body: AIInterviewReportBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    if not _has_ai_interview_access(current_user.user_id, db):
+        raise HTTPException(status_code=402, detail="AI Interview access requires a separate payment. Please contact us to unlock it.")
+
+    pdf_bytes = _build_interview_report_pdf(current_user.full_name or "Candidate", body.analysis)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=ai-interview-report.pdf"},
+    )
 
 # Alias used by mentee Browse Programs page
 @app.get("/api/mentee/programs/browse")
