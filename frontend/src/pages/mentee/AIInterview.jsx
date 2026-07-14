@@ -5,6 +5,15 @@ import { toast } from '../../utils/toast'
 
 const KICKOFF_MESSAGE = "Hi, I'm ready to start my mock interview."
 
+function renderFormatted(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part
+  )
+}
+
 export default function AIInterview() {
   const [messages, setMessages] = useState([]) // { role: 'user' | 'assistant', content: string }
   const [input, setInput] = useState('')
@@ -114,7 +123,7 @@ export default function AIInterview() {
                   borderBottomLeftRadius: m.role === 'user' ? 12 : 4,
                   whiteSpace: 'pre-wrap',
                 }}>
-                  {m.content}
+                  {renderFormatted(m.content)}
                 </div>
               ))}
               {loading && (
