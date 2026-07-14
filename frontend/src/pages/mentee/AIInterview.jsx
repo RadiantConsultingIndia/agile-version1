@@ -5,6 +5,13 @@ import { toast } from '../../utils/toast'
 
 const KICKOFF_MESSAGE = "Hi, I'm ready to start my mock interview."
 const SENTINEL = '[[INTERVIEW_COMPLETE]]'
+const INTERVIEW_DURATION_SECONDS = 20 * 60
+
+function formatTime(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 function renderFormatted(text) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g)
@@ -33,6 +40,8 @@ export default function AIInterview() {
   const [analysis, setAnalysis] = useState(null)
   const [gettingReport, setGettingReport] = useState(false)
   const [voiceOn, setVoiceOn] = useState(true)
+  const [timeLeft, setTimeLeft] = useState(INTERVIEW_DURATION_SECONDS)
+  const [pasteDetected, setPasteDetected] = useState(false)
   const recognitionRef = useRef(null)
   const silenceTimerRef = useRef(null)
 
@@ -56,6 +65,21 @@ export default function AIInterview() {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight
     }
   }, [messages, loading])
+
+  useEffect(() => {
+    if (!started || interviewComplete) return
+    const interval = setInterval(() => {
+      setTimeLeft(t => (t > 0 ? t - 1 : 0))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [started, interviewComplete])
+
+  useEffect(() => {
+    if (started && !interviewComplete && timeLeft === 0) {
+      toast("Time's up! Wrapping up your interview.")
+      endInterviewAndGetReport()
+    }
+  }, [timeLeft])
 
   useEffect(() => () => {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
@@ -97,6 +121,8 @@ export default function AIInterview() {
 
   const startInterview = () => {
     setStarted(true)
+    setTimeLeft(INTERVIEW_DURATION_SECONDS)
+    setPasteDetected(false)
     const first = [{ role: 'user', content: KICKOFF_MESSAGE }]
     setMessages(first)
     sendToApi(first)
@@ -111,6 +137,8 @@ export default function AIInterview() {
     setInterviewComplete(false)
     setAnalysis(null)
     setMicError(null)
+    setTimeLeft(INTERVIEW_DURATION_SECONDS)
+    setPasteDetected(false)
   }
 
   const sendMessage = () => {
@@ -190,7 +218,7 @@ export default function AIInterview() {
         currentAnalysis = res.data
         setAnalysis(currentAnalysis)
       }
-      const reportRes = await api.post('/api/mentee/ai-interview/report', { analysis: currentAnalysis }, { responseType: 'blob' })
+      const reportRes = await api.post('/api/mentee/ai-interview/report', { analysis: currentAnalysis, paste_detected: pasteDetected }, { responseType: 'blob' })
       const blob = new Blob([reportRes.data], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -270,7 +298,10 @@ export default function AIInterview() {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: timeLeft <= 60 ? '#dc2626' : '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
+                ⏱ {formatTime(timeLeft)}
+              </span>
               <button type="button" onClick={toggleVoice} title={voiceOn ? 'Mute AI voice' : 'Unmute AI voice'}
                 style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: voiceOn ? '#7c3aed' : '#94a3b8' }}>
                 {voiceOn ? '🔊' : '🔇'}
@@ -324,6 +355,7 @@ export default function AIInterview() {
                     {listening ? '⏹' : '🎤'}
                   </button>
                   <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+                    onPaste={() => setPasteDetected(true)}
                     placeholder="Type your answer, or use the microphone…" disabled={loading}
                     style={{ flex: 1, minHeight: 46, maxHeight: 120, resize: 'vertical', padding: '12px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontFamily: 'inherit', fontSize: 14, outline: 'none' }} />
                   <button onClick={sendMessage} disabled={loading || !input.trim()}
