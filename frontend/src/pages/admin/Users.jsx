@@ -12,6 +12,7 @@ const ROLE_STYLE = {
 export default function AdminUsers() {
   const [users,       setUsers]       = useState([])
   const [search,      setSearch]      = useState('')
+  const [creditInputs, setCreditInputs] = useState({})
 
   useEffect(() => {
     api.get('/api/admin/users').then(r => setUsers(r.data)).catch(() => {})
@@ -36,13 +37,18 @@ export default function AdminUsers() {
     }
   }
 
-  const toggleAiInterviewAccess = async u => {
-    const next = !u.ai_interview_access
+  const grantAiInterviewCredits = async u => {
+    const amount = Number(creditInputs[u.user_id] ?? 20)
+    if (!Number.isInteger(amount) || amount < 0) {
+      toast('Enter a whole number of credits (0 or more)')
+      return
+    }
     try {
-      await api.post(`/api/admin/users/${u.user_id}/ai-interview-access?has_access=${next}`)
-      setUsers(list => list.map(x => x.user_id === u.user_id ? { ...x, ai_interview_access: next } : x))
+      await api.post(`/api/admin/users/${u.user_id}/ai-interview-access?credits=${amount}`)
+      setUsers(list => list.map(x => x.user_id === u.user_id ? { ...x, ai_interview_credits: amount } : x))
+      toast(`Set to ${amount} AI Interview credit${amount === 1 ? '' : 's'}`)
     } catch (err) {
-      toast(err.response?.data?.detail || 'Failed to update AI Interview access')
+      toast(err.response?.data?.detail || 'Failed to update AI Interview credits')
     }
   }
 
@@ -135,11 +141,20 @@ export default function AdminUsers() {
                   </td>
                   <td style={{ padding: '14px 20px' }}>
                     {u.role === 'mentee' ? (
-                      <button onClick={() => toggleAiInterviewAccess(u)}
-                        style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 50, border: 'none', cursor: 'pointer',
-                          background: u.ai_interview_access ? '#f0fdf4' : '#f8fafc', color: u.ai_interview_access ? '#15803d' : '#94a3b8' }}>
-                        {u.ai_interview_access ? 'Unlocked' : 'Locked'}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 50, whiteSpace: 'nowrap',
+                          background: u.ai_interview_credits > 0 ? '#f0fdf4' : '#f8fafc', color: u.ai_interview_credits > 0 ? '#15803d' : '#94a3b8' }}>
+                          {u.ai_interview_credits ?? 0} left
+                        </span>
+                        <input type="number" min="0" step="1"
+                          value={creditInputs[u.user_id] ?? 20}
+                          onChange={e => setCreditInputs(prev => ({ ...prev, [u.user_id]: e.target.value }))}
+                          style={{ width: 52, fontSize: 12, padding: '4px 6px', borderRadius: 6, border: '1.5px solid #e2e8f0', outline: 'none' }} />
+                        <button onClick={() => grantAiInterviewCredits(u)}
+                          style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#059669', color: '#fff' }}>
+                          Set
+                        </button>
+                      </div>
                     ) : (
                       <span style={{ fontSize: 12, color: '#cbd5e1' }}>—</span>
                     )}
