@@ -17,6 +17,7 @@ const NAV = [
       { to: '/mentee/enrollments', label: 'My Enrollments', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
       { to: '/mentee/sessions',    label: 'My Sessions',    icon: 'M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z' },
       { to: '/mentee/ai-interview', label: 'AI Interview',  icon: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3' },
+      { to: '/mentee/ai-interview-practice', label: 'AI Interview Practice', icon: 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z' },
     ],
   },
   {
@@ -34,6 +35,7 @@ const CRUMBS = {
   '/mentee/enrollments':  ['My Enrollments', 'Active'],
   '/mentee/sessions':     ['My Sessions',    'All Sessions'],
   '/mentee/ai-interview': ['AI Interview',   'Practice'],
+  '/mentee/ai-interview-practice': ['AI Interview Practice', '3-Question Round'],
   '/mentee/attendance':   ['Attendance',     'My Record'],
   '/mentee/resources':    ['Resources',      'Study Materials'],
 }
