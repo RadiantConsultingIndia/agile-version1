@@ -42,6 +42,9 @@ export default function AIInterview() {
   const [voiceOn, setVoiceOn] = useState(true)
   const [timeLeft, setTimeLeft] = useState(INTERVIEW_DURATION_SECONDS)
   const [pasteDetected, setPasteDetected] = useState(false)
+  const [jdText, setJdText] = useState(null)
+  const [jdFileName, setJdFileName] = useState(null)
+  const [jdUploading, setJdUploading] = useState(false)
   const recognitionRef = useRef(null)
   const silenceTimerRef = useRef(null)
 
@@ -119,11 +122,37 @@ export default function AIInterview() {
     }
   }
 
+  const handleJdUpload = async e => {
+    const file = e.target.files[0]
+    if (!file) return
+    setJdUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post('/api/mentee/upload-jd', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setJdText(res.data.jd_text)
+      setJdFileName(file.name)
+    } catch (err) {
+      toast(err.response?.data?.detail || 'Could not read that file. Please try a different PDF or DOCX file.')
+    } finally {
+      setJdUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const removeJd = () => {
+    setJdText(null)
+    setJdFileName(null)
+  }
+
   const startInterview = () => {
     setStarted(true)
     setTimeLeft(INTERVIEW_DURATION_SECONDS)
     setPasteDetected(false)
-    const first = [{ role: 'user', content: KICKOFF_MESSAGE }]
+    const kickoffContent = jdText
+      ? `Hi, I'm ready to start my mock interview. Here is the job description I'm preparing for:\n\n${jdText}\n\nPlease tailor your questions to this specific role.`
+      : KICKOFF_MESSAGE
+    const first = [{ role: 'user', content: kickoffContent }]
     setMessages(first)
     sendToApi(first)
   }
@@ -286,6 +315,22 @@ export default function AIInterview() {
             <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
               The interviewer will ask which role you'd like to practice for (Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst), then walk you through a set of real interview questions with a summary at the end. Speak your answers using the microphone, or type if you prefer.
             </p>
+            <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '14px 16px', marginBottom: 20, textAlign: 'left' }}>
+              {jdFileName ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <span style={{ fontSize: 12.5, color: '#15803d' }}>✓ {jdFileName} — questions will be tailored to this role</span>
+                  <button type="button" onClick={removeJd} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Remove</button>
+                </div>
+              ) : (
+                <>
+                  <label style={{ display: 'inline-block', fontSize: 12.5, fontWeight: 700, color: '#7c3aed', cursor: jdUploading ? 'not-allowed' : 'pointer' }}>
+                    {jdUploading ? 'Reading file…' : '📄 Upload a job description (optional)'}
+                    <input type="file" accept=".pdf,.docx" onChange={handleJdUpload} disabled={jdUploading} style={{ display: 'none' }} />
+                  </label>
+                  <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '6px 0 0' }}>Please upload in DOCX or PDF format. Questions will be tailored to that specific role.</p>
+                </>
+              )}
+            </div>
             <button onClick={startInterview}
               style={{ background: '#7c3aed', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, padding: '12px 28px', borderRadius: 10, cursor: 'pointer' }}>
               Start Interview
