@@ -14,6 +14,8 @@ from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, ListFlowable, ListItem
 from reportlab.lib import colors
+import pypdf
+import docx
 
 from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,6 +48,7 @@ from models.resource import Resource
 from models.email_otp import EmailOTP
 from models.notification import Notification
 from models.ai_interview_access import AIInterviewAccess
+from models.ai_interview_practice_access import AIInterviewPracticeAccess
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
@@ -609,10 +612,12 @@ def generate_invite(body: GenerateInviteBody, current_user: User = Depends(requi
 def admin_get_users(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     users = db.query(User).filter(User.role != "admin").all()
     credits_by_user = {a.user_id: a.credits_remaining for a in db.query(AIInterviewAccess).all()}
+    practice_credits_by_user = {a.user_id: a.credits_remaining for a in db.query(AIInterviewPracticeAccess).all()}
     return [{"user_id": u.user_id, "full_name": u.full_name, "email": u.email,
              "role": u.role, "status": u.status, "created_at": str(u.created_at),
              "profile_photo": u.profile_photo,
-             "ai_interview_credits": credits_by_user.get(u.user_id, 0)} for u in users]
+             "ai_interview_credits": credits_by_user.get(u.user_id, 0),
+             "ai_interview_practice_credits": practice_credits_by_user.get(u.user_id, 0)} for u in users]
 
 @app.post("/api/admin/users/{user_id}/approve")
 def admin_approve_user(user_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -636,6 +641,22 @@ def admin_set_ai_interview_access(user_id: str, credits: int, current_user: User
         access.has_access = credits > 0
     else:
         access = AIInterviewAccess(user_id=user_id, credits_remaining=credits, has_access=credits > 0)
+        db.add(access)
+    db.commit()
+    return {"success": True, "user_id": user_id, "credits_remaining": credits}
+
+@app.post("/api/admin/users/{user_id}/ai-interview-practice-access")
+def admin_set_ai_interview_practice_access(user_id: str, credits: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if credits < 0:
+        raise HTTPException(status_code=400, detail="Credits cannot be negative")
+    user = db.query(User).filter(User.user_id == user_id, User.role == "mentee").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Mentee not found")
+    access = db.query(AIInterviewPracticeAccess).filter(AIInterviewPracticeAccess.user_id == user_id).first()
+    if access:
+        access.credits_remaining = credits
+    else:
+        access = AIInterviewPracticeAccess(user_id=user_id, credits_remaining=credits)
         db.add(access)
     db.commit()
     return {"success": True, "user_id": user_id, "credits_remaining": credits}
@@ -668,6 +689,7 @@ def admin_delete_user(user_id: str, current_user: User = Depends(require_admin),
     db.query(Notification).filter(Notification.user_id == user_id).delete()
     db.query(Resource).filter(Resource.uploaded_by == user_id).delete()
     db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == user_id).delete()
+    db.query(AIInterviewPracticeAccess).filter(AIInterviewPracticeAccess.user_id == user_id).delete()
 
     user = db.query(User).filter(User.user_id == user_id).first()
     if user:
@@ -696,6 +718,31 @@ def _validate_upload(file: UploadFile, contents: bytes, allowed_types: set, max_
         raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {limit_mb} MB.")
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=415, detail=f"Unsupported file type: {file.content_type}")
+
+ALLOWED_JD_TYPES = {"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+MAX_JD_TEXT_CHARS = 6000
+
+def _extract_text_from_upload(content_type: str, contents: bytes) -> str:
+    if content_type == "application/pdf":
+        reader = pypdf.PdfReader(io.BytesIO(contents))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    else:
+        document = docx.Document(io.BytesIO(contents))
+        text = "\n".join(p.text for p in document.paragraphs)
+    return text.strip()[:MAX_JD_TEXT_CHARS]
+
+@app.post("/api/mentee/upload-jd")
+async def upload_jd(file: UploadFile = File(...), current_user: User = Depends(require_mentee)):
+    contents = await file.read()
+    _validate_upload(file, contents, ALLOWED_JD_TYPES)
+    try:
+        jd_text = _extract_text_from_upload(file.content_type, contents)
+    except Exception as e:
+        print(f"[JD UPLOAD ERROR] {e}")
+        raise HTTPException(status_code=422, detail="Couldn't read text from that file. Please try a different PDF or DOCX file.")
+    if len(jd_text) < 20:
+        raise HTTPException(status_code=422, detail="Couldn't read text from that file. Please try a different PDF or DOCX file.")
+    return {"jd_text": jd_text}
 
 # ── ADMIN: Programs ───────────────────────────────────────────────────────────
 
@@ -1419,8 +1466,8 @@ def get_programs(current_user: User = Depends(require_user), db: Session = Depen
 
 AI_INTERVIEW_SYSTEM_PROMPT = """You are an experienced, friendly interviewer conducting a live mock interview to help a candidate practice for Agile-industry roles.
 
-Step 1: Start with a warm greeting and ask which role they'd like to practice for: Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst. Do this only once, at the very start.
-Step 2: Once they answer, ask 8-10 relevant interview questions one at a time for that role, mixing technical/role-specific questions (e.g. for Scrum Master: sprint ceremonies, velocity, impediment removal; for Product Owner: backlog prioritization, user stories; for Business Analyst: requirements gathering, process mapping; for Project/Program Manager: scope, risk, dependencies, stakeholder alignment) with behavioral questions. After each answer, briefly acknowledge it (a sentence, not a paragraph) and occasionally ask a natural follow-up before moving to the next question.
+Step 1: If the candidate's first message includes a job description, skip asking which role to practice and instead tailor every question specifically to that JD's stated responsibilities and requirements — briefly acknowledge you've reviewed it, then move straight to Step 2. Otherwise, start with a warm greeting and ask which role they'd like to practice for: Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst. Do this only once, at the very start.
+Step 2: Once you know the role (from the JD or their answer), ask 8-10 relevant interview questions one at a time for that role, mixing technical/role-specific questions (e.g. for Scrum Master: sprint ceremonies, velocity, impediment removal; for Product Owner: backlog prioritization, user stories; for Business Analyst: requirements gathering, process mapping; for Project/Program Manager: scope, risk, dependencies, stakeholder alignment) with behavioral questions. After each answer, briefly acknowledge it (a sentence, not a paragraph) and occasionally ask a natural follow-up before moving to the next question.
 Step 3: After the last question, or if the candidate says they want to stop, give a concise, encouraging closing summary: 2-3 specific strengths, 2-3 specific areas to improve, and an overall readiness assessment. End the interview there — do not ask further questions after this. Immediately after the closing summary, on its own with nothing else before or after it, append the exact literal text [[INTERVIEW_COMPLETE]] — this is a hidden marker for the app only; never mention, explain, or reference it to the candidate.
 
 Keep every response conversational and concise, like a real interviewer speaking out loud — not a long written report."""
@@ -1465,6 +1512,55 @@ def ai_interview_message(request: Request, body: AIInterviewBody, current_user: 
         )
     except anthropic.APIError as e:
         print(f"[AI INTERVIEW ERROR] {e}")
+        raise HTTPException(status_code=502, detail="The AI interviewer is temporarily unavailable. Please try again.")
+
+    if len(body.messages) == 1:
+        access.credits_remaining -= 1
+        db.commit()
+
+    reply = next((b.text for b in response.content if b.type == "text"), "")
+    return {"reply": reply, "credits_remaining": access.credits_remaining}
+
+AI_INTERVIEW_PRACTICE_SYSTEM_PROMPT = """You are an experienced, friendly interviewer running a short mock-interview practice session for an Agile-industry role.
+
+If the candidate's first message includes a job description, tailor your questions to that JD's stated responsibilities. Otherwise ask which role they'd like to practice for: Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst — ask this only once, at the very start, before your first question.
+
+Ask exactly 3 questions, one at a time, mixing technical/role-specific and behavioral questions. After the candidate answers each question, give immediate, concise feedback structured as exactly two short parts: "**What went well:** ..." (1-2 sentences) and "**What could improve:** ..." (1-2 sentences) — then move to the next question. Do not wait until the end to give feedback; give it after every single answer, including the third.
+
+After giving feedback on the 3rd and final answer, add a brief one-sentence encouraging close. Immediately after that, on its own with nothing else before or after it, append the exact literal text [[PRACTICE_COMPLETE]] — this is a hidden marker for the app only; never mention, explain, or reference it to the candidate.
+
+Keep every response conversational and concise, like a real interviewer speaking out loud — not a long written report."""
+
+def _practice_credits(user_id: str, db: Session) -> int:
+    access = db.query(AIInterviewPracticeAccess).filter(AIInterviewPracticeAccess.user_id == user_id).first()
+    return access.credits_remaining if access else 0
+
+@app.get("/api/mentee/ai-interview-practice/access")
+def ai_interview_practice_access(current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    credits = _practice_credits(current_user.user_id, db)
+    return {"has_access": credits > 0, "credits_remaining": credits}
+
+@app.post("/api/mentee/ai-interview-practice/message")
+@limiter.limit("20/minute")
+def ai_interview_practice_message(request: Request, body: AIInterviewBody, current_user: User = Depends(require_mentee), db: Session = Depends(get_db)):
+    access = db.query(AIInterviewPracticeAccess).filter(AIInterviewPracticeAccess.user_id == current_user.user_id).first()
+    if not access or access.credits_remaining <= 0:
+        raise HTTPException(status_code=402, detail="You've used all your AI Interview Practice credits. Please contact us to unlock more.")
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="AI interview isn't configured yet. Please try again later.")
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="At least one message is required.")
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=AI_INTERVIEW_PRACTICE_SYSTEM_PROMPT,
+            messages=[{"role": m.role, "content": m.content} for m in body.messages],
+        )
+    except anthropic.APIError as e:
+        print(f"[AI INTERVIEW PRACTICE ERROR] {e}")
         raise HTTPException(status_code=502, detail="The AI interviewer is temporarily unavailable. Please try again.")
 
     if len(body.messages) == 1:
