@@ -34,6 +34,7 @@ import MySessions from './pages/mentee/Sessions'
 import MyAttendance from './pages/mentee/Attendance'
 import MyResources from './pages/mentee/Resources'
 import AIInterview from './pages/mentee/AIInterview'
+import AIInterviewPractice from './pages/mentee/AIInterviewPractice'
 
 export default function App() {
   return (
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/mentee/attendance" element={<PrivateRoute role="mentee"><MyAttendance /></PrivateRoute>} />
           <Route path="/mentee/resources" element={<PrivateRoute role="mentee"><MyResources /></PrivateRoute>} />
           <Route path="/mentee/ai-interview" element={<PrivateRoute role="mentee"><AIInterview /></PrivateRoute>} />
+          <Route path="/mentee/ai-interview-practice" element={<PrivateRoute role="mentee"><AIInterviewPractice /></PrivateRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
