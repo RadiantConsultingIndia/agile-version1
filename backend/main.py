@@ -752,7 +752,8 @@ async def upload_cover_image(file: UploadFile = File(...), current_user: User = 
     _validate_upload(file, contents, ALLOWED_IMAGE_TYPES)
     try:
         url = upload_file(contents, folder="agilementor/covers", resource_type="image")
-    except Exception:
+    except Exception as e:
+        print(f"[COVER UPLOAD ERROR] {e}")
         raise HTTPException(status_code=503, detail="Image upload failed. Please try again.")
     return {"url": url}
 
@@ -989,7 +990,8 @@ async def admin_upload_resource(
     cld_type = "video" if file.content_type in ALLOWED_VIDEO_TYPES else ("image" if file_type == "image" else "raw")
     try:
         url = upload_file(contents, folder="agilementor/resources", resource_type=cld_type)
-    except Exception:
+    except Exception as e:
+        print(f"[RESOURCE UPLOAD ERROR] {e}")
         raise HTTPException(status_code=503, detail="File upload failed. Please try again.")
     resource = Resource(
         resource_id=generate_resource_id(db), title=title, description=description or None,
@@ -1080,7 +1082,8 @@ async def upload_profile_photo(file: UploadFile = File(...),
     _validate_upload(file, contents, ALLOWED_IMAGE_TYPES)
     try:
         url = upload_file(contents, folder="agilementor/profiles", resource_type="image")
-    except Exception:
+    except Exception as e:
+        print(f"[PROFILE PHOTO UPLOAD ERROR] {e}")
         raise HTTPException(status_code=503, detail="Image upload failed. Please try again.")
     current_user.profile_photo = url
     db.commit()
@@ -1250,7 +1253,8 @@ async def mentor_upload_certificate(
     resource_type = "raw" if file_type == "pdf" else "image"
     try:
         url = upload_file(contents, folder="agilementor/certificates", resource_type=resource_type)
-    except Exception:
+    except Exception as e:
+        print(f"[CERTIFICATE UPLOAD ERROR] {e}")
         raise HTTPException(status_code=503, detail="File upload failed. Please try again.")
     cert = MentorCertificate(
         cert_id=generate_cert_id(db), mentor_profile_id=mentor.mentor_profile_id,
@@ -1302,7 +1306,8 @@ async def mentor_upload_resource(
     cld_type = "video" if file.content_type in ALLOWED_VIDEO_TYPES else ("image" if file_type == "image" else "raw")
     try:
         url = upload_file(contents, folder="agilementor/resources", resource_type=cld_type)
-    except Exception:
+    except Exception as e:
+        print(f"[RESOURCE UPLOAD ERROR] {e}")
         raise HTTPException(status_code=503, detail="File upload failed. Please try again.")
     resource = Resource(
         resource_id=generate_resource_id(db), title=title, description=description or None,
