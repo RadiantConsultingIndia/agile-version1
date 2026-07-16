@@ -179,8 +179,9 @@ export default function AdminPrograms() {
           fd.append('file', coverFile)
           const up = await api.post('/api/upload-cover', fd)
           await api.put(`/api/admin/programs/${programId}`, { cover_image: up.data.url })
-        } catch {
-          // Cover upload failed — program is saved without it
+        } catch (err) {
+          console.error('Cover image upload failed:', err)
+          toast(err.response?.data?.detail || 'Program saved, but the cover image failed to upload.')
         }
       }
 
