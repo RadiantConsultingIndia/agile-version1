@@ -22,6 +22,26 @@ function renderFormatted(text) {
   )
 }
 
+function renderMessageContent(text, isAssistant) {
+  if (!isAssistant) return renderFormatted(text)
+  const ratingMatch = text.match(/^\*\*Rating:\s*(\d+)\/10\*\*\s*(?:—|-)?\s*([^\n]*)/i)
+  if (!ratingMatch) return renderFormatted(text)
+  const score = parseInt(ratingMatch[1], 10)
+  const reason = ratingMatch[2].trim()
+  const rest = text.slice(ratingMatch[0].length).trim()
+  const color = score >= 8 ? '#15803d' : score >= 5 ? '#b45309' : '#dc2626'
+  const bg = score >= 8 ? '#f0fdf4' : score >= 5 ? '#fffbeb' : '#fef2f2'
+  return (
+    <>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: bg, color: color, fontWeight: 700, fontSize: 12.5, padding: '4px 10px', borderRadius: 999, marginBottom: 8 }}>
+        ⭐ {score}/10
+      </div>
+      {reason && <p style={{ margin: '0 0 8px', fontStyle: 'italic' }}>{reason}</p>}
+      {rest && <div>{renderFormatted(rest)}</div>}
+    </>
+  )
+}
+
 export default function AIInterviewPractice() {
   const [messages, setMessages] = useState([]) // { role: 'user' | 'assistant', content: string }
   const [input, setInput] = useState('')
@@ -263,7 +283,7 @@ export default function AIInterviewPractice() {
             <div style={{ fontSize: 40, marginBottom: 14 }}>🎯</div>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>Ready when you are</h2>
             <p style={{ fontSize: 14, color: '#64748b', maxWidth: 440, margin: '0 auto 24px' }}>
-              A quick 3-question practice round for Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst roles. You'll get feedback on what went well and what could improve right after each answer. Speak your answers using the microphone, or type if you prefer.
+              A quick 3-question practice round for Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst roles. You'll get a rating out of 10 plus feedback on what went well and what could improve right after each answer. Speak your answers using the microphone, or type if you prefer.
             </p>
             <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '14px 16px', marginBottom: 20, textAlign: 'left' }}>
               {jdFileName ? (
@@ -313,7 +333,7 @@ export default function AIInterviewPractice() {
                   borderBottomLeftRadius: m.role === 'user' ? 12 : 4,
                   whiteSpace: 'pre-wrap',
                 }}>
-                  {renderFormatted(m.content)}
+                  {renderMessageContent(m.content, m.role === 'assistant')}
                 </div>
               ))}
               {loading && (
