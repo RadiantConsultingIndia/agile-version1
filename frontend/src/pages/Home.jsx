@@ -201,6 +201,7 @@ export default function Home() {
 
           {/* Desktop actions */}
           <div className="am-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 16, marginLeft: 'auto' }}>
+            <a href="https://radiantconsultingindia.com" style={{ fontSize: 13.5, fontWeight: 600, color: '#64748b', textDecoration: 'none' }}>← Main Site</a>
             <Link to="/login/mentee" style={{ fontSize: 14, fontWeight: 600, color: '#374151', textDecoration: 'none' }}>Login</Link>
             <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 700, color: '#fff', textDecoration: 'none', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', padding: '9px 22px', borderRadius: 50, boxShadow: '0 4px 14px rgba(37,99,235,0.4)' }}>
               Get Started
@@ -227,6 +228,10 @@ export default function Home() {
             </a>
           ))}
           <div className="am-mob-divider" />
+          <a href="https://radiantconsultingindia.com" onClick={() => setMenuOpen(false)}
+            style={{ fontSize: 15, fontWeight: 500, color: '#64748b', textDecoration: 'none', padding: '10px 12px', display: 'block' }}>
+            ← Main Site
+          </a>
           <Link to="/login/mentee" onClick={() => setMenuOpen(false)}
             style={{ fontSize: 15, fontWeight: 600, color: '#374151', textDecoration: 'none', padding: '10px 12px', display: 'block' }}>
             Login
