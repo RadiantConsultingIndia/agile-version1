@@ -197,7 +197,7 @@ export default function Login() {
 function TopBar() {
   return (
     <div style={S.topbar}>
-      <Link to="/" style={{
+      <a href="https://radiantconsultingindia.com" style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
         color: '#475569', fontSize: 13.5, fontWeight: 600, textDecoration: 'none',
         padding: '6px 10px', borderRadius: 8, transition: 'background 0.15s, color 0.15s',
@@ -206,7 +206,7 @@ function TopBar() {
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569' }}
       >
         ← Home
-      </Link>
+      </a>
     </div>
   )
 }
