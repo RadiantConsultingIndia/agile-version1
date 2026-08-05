@@ -4,53 +4,42 @@ import { Link } from 'react-router-dom'
 /* ── Data ───────────────────────────────────────────────── */
 const PROGRAMS = [
   {
-    id: 1, tag: 'POPULAR', tagColor: '#22c55e',
-    title: 'Agile & Scrum Mastery',
-    desc: 'Master sprint planning, retrospectives, and team facilitation. Go from Agile basics to leading high-performing Scrum teams.',
-    topics: ['Sprint Planning', 'User Stories', 'Retrospectives'],
-    weeks: 8, enrolled: 240, rating: 4.9,
+    id: 1, tag: 'PROJECT-BASED', tagColor: '#22c55e',
+    title: 'Internship Program',
+    desc: 'Structured, project-based internships that simulate a real workplace from day one.',
+    topics: ['Engineering', 'AI / ML', 'Product'],
+    fact: '8–12 weeks · Remote, Agile teams',
     headerColors: ['var(--brand-navy-deep)', '#4f46e5'],
-    emoji: '⚡',
+    emoji: '🚀',
   },
   {
-    id: 2, tag: 'LIVE SESSIONS', tagColor: '#0ea5e9',
-    title: 'Product Management Fundamentals',
-    desc: 'Learn to define product vision, prioritize backlogs, and ship features users love. Includes live case studies from real PMs.',
-    topics: ['Roadmaps', 'OKRs', 'Stakeholder Mgmt'],
-    weeks: 6, enrolled: 180, rating: 4.8,
+    id: 2, tag: 'POPULAR', tagColor: '#0ea5e9',
+    title: 'Mentorship Program',
+    desc: "1:1 guidance from professionals who help you build technical and leadership skills.",
+    topics: ['1:1 Guidance', 'Career Strategy', 'Mock Interviews'],
+    fact: '3-month cycles · Bi-weekly sessions',
     headerColors: ['#0d9488', '#0891b2'],
     emoji: '🎯',
   },
   {
-    id: 3, tag: 'NEW', tagColor: '#f97316',
-    title: 'DevOps for Agile Teams',
-    desc: 'Bridge development and operations with CI/CD pipelines, containerization, and automated deployments in Agile environments.',
-    topics: ['CI/CD', 'Docker', 'Kubernetes'],
-    weeks: 10, enrolled: 95, rating: 4.9,
+    id: 3, tag: 'HANDS-ON', tagColor: '#f97316',
+    title: 'Live Industry Projects',
+    desc: 'Collaborate in real Agile teams building real products with real stakeholders.',
+    topics: ['Engineering', 'Product', 'Design'],
+    fact: '2-week sprints · 4–6 person teams',
     headerColors: ['#7c3aed', '#a855f7'],
-    emoji: '🚀',
+    emoji: '🧩',
+  },
+  {
+    id: 4, tag: 'NEW', tagColor: '#ec4899',
+    title: 'AI Interview Support',
+    desc: 'Practice real interview questions and get instant, structured AI feedback.',
+    topics: ['Voice Interview', 'JD-Tailored', 'STAR Reports'],
+    fact: 'Free to try · Credit-based sessions',
+    headerColors: ['#1d4ed8', '#0ea5e9'],
+    emoji: '🎤',
   },
 ]
-
-const MENTORS = [
-  { name: 'Rahul Verma', role: 'Scrum Master', company: 'TCS', bio: 'Certified CSM & SAFe Agilist. Led Agile transformations for 50+ enterprise teams across banking and telecom.', exp: '12+ yrs', rating: 4.9, reviews: 128, mentees: 340, sessions: 52, tags: ['Scrum', 'SAFe', 'Jira'], border: '#fb923c', grad: 'linear-gradient(135deg,#f97316,#ef4444)', initials: 'RV' },
-  { name: 'Priya Sharma', role: 'Product Manager', company: 'Infosys', bio: 'Former PM at a Series B startup. Specialises in product roadmaps, stakeholder alignment, and OKR frameworks.', exp: '9+ yrs', rating: 4.8, reviews: 96, mentees: 215, sessions: 38, tags: ['Product', 'Roadmaps', 'OKRs'], border: '#facc15', grad: 'linear-gradient(135deg,#f59e0b,#d97706)', initials: 'PS' },
-  { name: 'Arjun Mehta', role: 'DevOps Engineer', company: 'Wipro', bio: 'Built CI/CD pipelines for Fortune 500 clients. Passionate about bridging DevOps practices with Agile delivery.', exp: '7+ yrs', rating: 4.9, reviews: 74, mentees: 180, sessions: 41, tags: ['CI/CD', 'Docker', 'Agile'], border: '#4ade80', grad: 'linear-gradient(135deg,#16a34a,#059669)', initials: 'AM' },
-  { name: 'Neha Kulkarni', role: 'Agile Coach', company: 'Accenture', bio: 'Enterprise Agile coach who has trained 200+ professionals. Expert in Kanban, Lean, and team coaching at scale.', exp: '15+ yrs', rating: 5.0, reviews: 112, mentees: 420, sessions: 67, tags: ['Coaching', 'Kanban', 'Lean'], border: '#f472b6', grad: 'linear-gradient(135deg,#ec4899,#a855f7)', initials: 'NK' },
-]
-
-/* ── Reusable atoms ─────────────────────────────────────── */
-function StarRating({ rating, reviews }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      <svg width="15" height="15" viewBox="0 0 20 20" style={{ fill: '#f59e0b', flexShrink: 0 }}>
-        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-      </svg>
-      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{rating}</span>
-      <span style={{ color: '#94a3b8', fontSize: 13 }}>({reviews} reviews)</span>
-    </div>
-  )
-}
 
 /* ── Program Finder quiz ────────────────────────────────── */
 const FINDER_TRACKS = [
@@ -311,7 +300,7 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
               </svg>
               <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
-                Trusted by learners from <strong style={{ color: '#fff', fontWeight: 600 }}>TCS, Infosys, Wipro, Accenture, HCL</strong>
+                Guided by <strong style={{ color: '#fff', fontWeight: 600 }}>real Agile practitioners and hiring professionals</strong>
               </p>
             </div>
           </div>
@@ -335,43 +324,34 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="am-programs-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 28 }}>
+          <div className="am-programs-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 24 }}>
             {PROGRAMS.map(p => (
               <div key={p.id} style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', transition: 'transform 0.2s, box-shadow 0.2s' }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.14)' }}
                 onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.08)' }}>
 
-                <div style={{ height: 200, position: 'relative', background: `linear-gradient(135deg, ${p.headerColors[0]} 0%, ${p.headerColors[1]} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ height: 160, position: 'relative', background: `linear-gradient(135deg, ${p.headerColors[0]} 0%, ${p.headerColors[1]} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
                   <div style={{ position: 'absolute', bottom: -20, left: -20, width: 90, height: 90, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-                  <span style={{ fontSize: 64, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))', position: 'relative', zIndex: 1 }}>{p.emoji}</span>
-                  <span style={{ position: 'absolute', top: 16, left: 16, background: p.tagColor, color: '#fff', fontSize: 11, fontWeight: 800, padding: '5px 12px', borderRadius: 6, letterSpacing: '0.04em' }}>{p.tag}</span>
+                  <span style={{ fontSize: 52, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))', position: 'relative', zIndex: 1 }}>{p.emoji}</span>
+                  <span style={{ position: 'absolute', top: 14, left: 14, background: p.tagColor, color: '#fff', fontSize: 10.5, fontWeight: 800, padding: '5px 11px', borderRadius: 6, letterSpacing: '0.04em' }}>{p.tag}</span>
                 </div>
 
-                <div style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 0 10px', lineHeight: 1.3 }}>{p.title}</h3>
-                  <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.65, margin: '0 0 16px', flex: 1 }}>{p.desc}</p>
+                <div style={{ padding: '22px 20px 24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <h3 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 8px', lineHeight: 1.3 }}>{p.title}</h3>
+                  <p style={{ fontSize: 13.5, color: '#64748b', lineHeight: 1.6, margin: '0 0 14px', flex: 1 }}>{p.desc}</p>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-                    <svg width="16" height="16" fill="none" stroke="#16a34a" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                    </svg>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#16a34a' }}>Certificate on completion</span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
                     {p.topics.map(t => (
-                      <span key={t} style={{ fontSize: 12, fontWeight: 500, background: '#f1f5f9', color: '#475569', padding: '4px 12px', borderRadius: 50 }}>{t}</span>
+                      <span key={t} style={{ fontSize: 11.5, fontWeight: 500, background: '#f1f5f9', color: '#475569', padding: '4px 11px', borderRadius: 50 }}>{t}</span>
                     ))}
                   </div>
 
-                  <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 16, marginBottom: 20 }}>
-                    <span>📅 {p.weeks} Weeks</span>
-                    <span>👥 {p.enrolled} enrolled</span>
-                    <span>⭐ {p.rating}</span>
+                  <div style={{ fontSize: 12, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 14, marginBottom: 18 }}>
+                    {p.fact}
                   </div>
 
-                  <Link to="/signup/mentee" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px', borderRadius: 12, boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}>
+                  <Link to="/signup/mentee" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontSize: 13.5, fontWeight: 700, padding: '12px', borderRadius: 12, boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}>
                     Enroll Now
                   </Link>
                 </div>
@@ -383,72 +363,20 @@ export default function Home() {
 
       {/* ════ MENTORS ════ */}
       <section id="mentors" className="am-section-pad" style={{ background: '#f8fafc', padding: '96px 0' }}>
-        <div className="am-section-inner" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px' }}>
-          <div className="am-section-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 52 }}>
-            <div>
-              <h2 style={{ fontSize: 36, fontWeight: 800, color: '#0f172a', margin: '0 0 10px', letterSpacing: '-0.5px' }}>
-                Meet Our <span style={{ color: 'var(--brand-teal-deep)' }}>Mentors</span>
-              </h2>
-              <p style={{ fontSize: 16, color: '#64748b', margin: 0 }}>Hand-picked professionals from top companies — real experience, real results</p>
-            </div>
-            <Link to="/signup/mentee" style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-teal-deep)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-              View all mentors →
+        <div className="am-section-inner" style={{ maxWidth: 900, margin: '0 auto', padding: '0 32px', textAlign: 'center' }}>
+          <h2 style={{ fontSize: 36, fontWeight: 800, color: '#0f172a', margin: '0 0 16px', letterSpacing: '-0.5px' }}>
+            Learn From <span style={{ color: 'var(--brand-teal-deep)' }}>Real Agile Practitioners</span>
+          </h2>
+          <p style={{ fontSize: 16, color: '#64748b', margin: '0 0 40px', lineHeight: 1.7 }}>
+            Every mentor on AgileMentor is a working Agile practitioner or hiring professional, reviewed and approved by our team before they're matched with mentees — not a stock profile. You'll be matched with a real mentor based on your goals once you sign up.
+          </p>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link to="/signup/mentee" style={{ background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', color: '#fff', fontSize: 14, fontWeight: 700, padding: '13px 28px', borderRadius: 10, textDecoration: 'none', boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}>
+              Get Matched With a Mentor
             </Link>
-          </div>
-
-          <div className="am-mentors-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 22 }}>
-            {MENTORS.map(m => (
-              <div key={m.name} style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.07)', border: '1px solid #f1f5f9', borderTop: `4px solid ${m.border}`, display: 'flex', flexDirection: 'column', transition: 'transform 0.2s, box-shadow 0.2s' }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(0,0,0,0.12)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 16px rgba(0,0,0,0.07)' }}>
-
-                <div style={{ padding: '28px 22px 24px', display: 'flex', flexDirection: 'column', flex: 1, alignItems: 'center', textAlign: 'center' }}>
-                  <div style={{ position: 'relative', marginBottom: 16 }}>
-                    <div style={{ width: 80, height: 80, borderRadius: '50%', background: m.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 26, fontWeight: 800, boxShadow: '0 6px 20px rgba(0,0,0,0.2)' }}>
-                      {m.initials}
-                    </div>
-                    <div style={{ position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)', background: '#1e293b', color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 50, whiteSpace: 'nowrap' }}>
-                      {m.exp}
-                    </div>
-                  </div>
-
-                  <StarRating rating={m.rating} reviews={m.reviews} />
-
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 50, padding: '5px 12px', marginTop: 10, marginBottom: 14 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a' }}>Available this week</span>
-                  </div>
-
-                  <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>{m.name}</p>
-                  <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 12px' }}>
-                    {m.role} · <span style={{ color: 'var(--brand-teal-deep)', fontWeight: 600 }}>{m.company}</span>
-                  </p>
-
-                  <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, margin: '0 0 18px', flex: 1 }}>{m.bio}</p>
-
-                  <div style={{ display: 'flex', gap: 0, width: '100%', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: '14px 0', marginBottom: 14 }}>
-                    {[['Mentees', m.mentees],['Sessions', m.sessions]].map(([label, val], i) => (
-                      <div key={label} style={{ flex: 1, textAlign: 'center', borderLeft: i ? '1px solid #f1f5f9' : 'none' }}>
-                        <p style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: '0 0 2px' }}>{val}</p>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>{label}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginBottom: 18 }}>
-                    {m.tags.map(t => (
-                      <span key={t} style={{ fontSize: 12, fontWeight: 500, background: '#eff6ff', color: 'var(--brand-teal-deep)', padding: '4px 10px', borderRadius: 50 }}>{t}</span>
-                    ))}
-                  </div>
-
-                  <Link to="/signup/mentee" style={{ display: 'block', width: '100%', textAlign: 'center', textDecoration: 'none', border: '1.5px solid #bfdbfe', color: 'var(--brand-navy)', background: 'transparent', fontSize: 13, fontWeight: 600, padding: '10px', borderRadius: 12, transition: 'background 0.15s, color 0.15s', boxSizing: 'border-box' }}
-                    onMouseEnter={e => { e.target.style.background = 'var(--brand-teal)'; e.target.style.color = '#fff' }}
-                    onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--brand-navy)' }}>
-                    Book Session
-                  </Link>
-                </div>
-              </div>
-            ))}
+            <Link to="/signup/mentor" style={{ border: '1.5px solid #bfdbfe', color: 'var(--brand-navy)', fontSize: 14, fontWeight: 600, padding: '13px 28px', borderRadius: 10, textDecoration: 'none', background: 'transparent' }}>
+              Become a Mentor
+            </Link>
           </div>
         </div>
       </section>
