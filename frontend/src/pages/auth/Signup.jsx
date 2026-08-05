@@ -111,7 +111,21 @@ export default function Signup() {
   const inputStyle = { width: '100%', padding: '13px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fafafa', fontFamily: 'inherit' }
 
   return (
-    <div className="am-auth-page" style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="am-auth-page" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '14px 28px', background: '#fff', borderBottom: '1px solid #eef1f6' }}>
+        <a href="https://radiantconsultingindia.com" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          color: '#475569', fontSize: 13.5, fontWeight: 600, textDecoration: 'none',
+          padding: '6px 10px', borderRadius: 8, transition: 'background 0.15s, color 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#0f172a' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569' }}
+        >
+          ← Home
+        </a>
+      </div>
+
+      <div style={{ display: 'flex', flex: 1 }}>
       <LeftPanel role={role} />
 
       <div className="am-auth-right" style={{ flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 40px', overflowY: 'auto' }}>
@@ -217,6 +231,7 @@ export default function Signup() {
             </Link>
           </p>
         </div>
+      </div>
       </div>
     </div>
   )
