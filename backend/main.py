@@ -49,6 +49,8 @@ from models.email_otp import EmailOTP
 from models.notification import Notification
 from models.ai_interview_access import AIInterviewAccess
 from models.ai_interview_practice_access import AIInterviewPracticeAccess
+from models.ai_interview_usage_log import AIInterviewUsageLog
+from models.testimonial import Testimonial
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
@@ -579,6 +581,7 @@ def reset_password(body: ResetPasswordBody, db: Session = Depends(get_db)):
 
 @app.get("/api/admin/dashboard")
 def admin_dashboard(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return {
         "total_programs":       db.query(Program).count(),
         "active_programs":      db.query(Program).filter(Program.status == "active").count(),
@@ -588,6 +591,8 @@ def admin_dashboard(current_user: User = Depends(require_admin), db: Session = D
         "total_mentors":        db.query(User).filter(User.role == "mentor").count(),
         "total_enrollments":    db.query(Enrollment).count(),
         "certificate_eligible": db.query(Enrollment).filter(Enrollment.status == "certificate_eligible").count(),
+        "ai_interviews_this_month": db.query(AIInterviewUsageLog).filter(AIInterviewUsageLog.type == "interview", AIInterviewUsageLog.created_at >= month_start).count(),
+        "ai_practice_this_month":   db.query(AIInterviewUsageLog).filter(AIInterviewUsageLog.type == "practice", AIInterviewUsageLog.created_at >= month_start).count(),
     }
 
 @app.post("/api/admin/generate-invite")
@@ -1457,6 +1462,76 @@ def public_programs(response: Response, db: Session = Depends(get_db)):
     return [{"title": p.title, "description": p.description,
              "category": p.category, "duration_weeks": p.duration_weeks} for p in programs]
 
+@app.post("/api/public/testimonials")
+@limiter.limit("5/hour")
+async def submit_testimonial(
+    request: Request,
+    name: str = Form(...), program: str = Form(...), email: str = Form(...),
+    whatsapp: str = Form(...), content: str = Form(...),
+    photo: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
+    """Unauthenticated testimonial submission from the public site/portal. Goes to admin for approval before it's shown."""
+    photo_url = None
+    if photo is not None and photo.filename:
+        contents = await photo.read()
+        _validate_upload(photo, contents, ALLOWED_IMAGE_TYPES)
+        try:
+            photo_url = upload_file(contents, folder="agilementor/testimonials", resource_type="image")
+        except Exception as e:
+            print(f"[TESTIMONIAL PHOTO UPLOAD ERROR] {e}")
+            raise HTTPException(status_code=503, detail="Photo upload failed. Please try again.")
+    testimonial = Testimonial(
+        name=name, program=program, email=email, whatsapp=whatsapp,
+        photo_url=photo_url, content=content, status="pending",
+    )
+    db.add(testimonial)
+    db.commit()
+    return {"success": True}
+
+@app.get("/api/public/testimonials")
+def public_testimonials(response: Response, db: Session = Depends(get_db)):
+    """Unauthenticated, approved-only testimonial list for public display. Never exposes email/whatsapp."""
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    items = db.query(Testimonial).filter(Testimonial.status == "approved").order_by(Testimonial.created_at.desc()).all()
+    return [{"name": t.name, "program": t.program, "photo_url": t.photo_url, "content": t.content} for t in items]
+
+@app.get("/api/admin/testimonials")
+def admin_list_testimonials(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    items = db.query(Testimonial).order_by(Testimonial.created_at.desc()).all()
+    return [{
+        "id": t.id, "name": t.name, "program": t.program, "email": t.email,
+        "whatsapp": t.whatsapp, "photo_url": t.photo_url, "content": t.content,
+        "status": t.status, "created_at": t.created_at.isoformat() if t.created_at else None,
+    } for t in items]
+
+@app.post("/api/admin/testimonials/{testimonial_id}/approve")
+def admin_approve_testimonial(testimonial_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    t = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    t.status = "approved"
+    db.commit()
+    return {"success": True, "id": testimonial_id, "status": t.status}
+
+@app.post("/api/admin/testimonials/{testimonial_id}/reject")
+def admin_reject_testimonial(testimonial_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    t = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    t.status = "rejected"
+    db.commit()
+    return {"success": True, "id": testimonial_id, "status": t.status}
+
+@app.delete("/api/admin/testimonials/{testimonial_id}")
+def admin_delete_testimonial(testimonial_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    t = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    db.delete(t)
+    db.commit()
+    return {"success": True}
+
 @app.get("/api/programs")
 def get_programs(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
     programs = db.query(Program).filter(Program.status == "active").all()
@@ -1521,6 +1596,7 @@ def ai_interview_message(request: Request, body: AIInterviewBody, current_user: 
 
     if len(body.messages) == 1:
         access.credits_remaining -= 1
+        db.add(AIInterviewUsageLog(user_id=current_user.user_id, type="interview"))
         db.commit()
 
     reply = next((b.text for b in response.content if b.type == "text"), "")
@@ -1530,7 +1606,7 @@ AI_INTERVIEW_PRACTICE_SYSTEM_PROMPT = """You are an experienced, friendly interv
 
 If the candidate's first message includes a job description, tailor your questions to that JD's stated responsibilities. Otherwise ask which role they'd like to practice for: Project Manager, Scrum Master, Program Manager, Product Owner, or Business Analyst — ask this only once, at the very start, before your first question.
 
-Ask exactly 3 questions, one at a time, mixing technical/role-specific and behavioral questions. After the candidate answers each question, give immediate, concise feedback structured as exactly three short parts, in this exact order: "**Rating: X/10** — " followed by one short phrase justifying the score (replace X with a whole number from 1 to 10, judged on clarity, relevance, and depth of the answer), then "**What went well:** ..." (1-2 sentences), then "**What could improve:** ..." (1-2 sentences) — then move to the next question. Do not wait until the end to give feedback; give it after every single answer, including the third. Be honest and fair with the rating — do not default to high scores; a vague or thin answer should score low.
+Ask exactly 3 questions, one at a time, mixing technical/role-specific and behavioral questions. After the candidate answers each question, give immediate feedback structured as exactly three short parts, in this exact order: "**Rating: X/10** — " followed by one short phrase justifying the score (replace X with a whole number from 1 to 10, judged on clarity, relevance, and depth of the answer), then "**What went well:** " followed by exactly ONE sentence, then "**What could improve:** " followed by exactly ONE sentence — then move to the next question. Keep each of these two feedback sentences under 25 words — be specific but brief, not exhaustive. Do not wait until the end to give feedback; give it after every single answer, including the third. Be honest and fair with the rating — do not default to high scores; a vague or thin answer should score low.
 
 After giving feedback on the 3rd and final answer, add a brief one-sentence encouraging close. Immediately after that, on its own with nothing else before or after it, append the exact literal text [[PRACTICE_COMPLETE]] — this is a hidden marker for the app only; never mention, explain, or reference it to the candidate.
 
@@ -1560,7 +1636,7 @@ def ai_interview_practice_message(request: Request, body: AIInterviewBody, curre
     try:
         response = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=400,
+            max_tokens=700,
             system=AI_INTERVIEW_PRACTICE_SYSTEM_PROMPT,
             messages=[{"role": m.role, "content": m.content} for m in body.messages],
         )
@@ -1570,6 +1646,7 @@ def ai_interview_practice_message(request: Request, body: AIInterviewBody, curre
 
     if len(body.messages) == 1:
         access.credits_remaining -= 1
+        db.add(AIInterviewUsageLog(user_id=current_user.user_id, type="practice"))
         db.commit()
 
     reply = next((b.text for b in response.content if b.type == "text"), "")
