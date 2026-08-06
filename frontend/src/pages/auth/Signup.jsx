@@ -12,7 +12,7 @@ const LEFT_CONTENT = {
     cards: [
       { emoji: '🎯', label: 'Personalized Mentorship', sub: 'Matched to your goals and experience' },
       { emoji: '📅', label: 'Live Weekly Sessions', sub: 'Join real Agile sprints and retrospectives' },
-      { emoji: '🏆', label: 'Earn Certificates', sub: 'Recognized by top product companies' },
+      { emoji: '🏆', label: 'Earn Certificates', sub: 'Proof of the work you actually did, not just attendance' },
     ],
   },
   Mentor: {
