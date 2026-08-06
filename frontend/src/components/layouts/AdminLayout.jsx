@@ -17,6 +17,7 @@ const NAV = [
       { to: '/admin/sessions',   label: 'Sessions',   icon: 'M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z' },
       { to: '/admin/users',      label: 'Users',      icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
       { to: '/admin/resources',  label: 'Resources',  icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z' },
+      { to: '/admin/testimonials', label: 'Testimonials', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
     ],
   },
   {
@@ -34,6 +35,7 @@ const CRUMBS = {
   '/admin/sessions':   ['Sessions',   'All Sessions'],
   '/admin/users':      ['Users',      'All Users'],
   '/admin/resources':  ['Resources',  'All Files'],
+  '/admin/testimonials': ['Testimonials', 'Review & Approve'],
   '/admin/attendance': ['Attendance', 'Mark & View'],
   '/admin/analytics':  ['Analytics',  'Platform Insights'],
 }
