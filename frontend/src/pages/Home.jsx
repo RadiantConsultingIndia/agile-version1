@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import api from '../api/client'
 
 /* ── Data ───────────────────────────────────────────────── */
 const PROGRAMS = [
@@ -78,8 +79,8 @@ function ProgramFinder() {
   useEffect(() => {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 3000)
-    fetch('https://agile-mentorship-backend.onrender.com/api/public/programs', { signal: controller.signal })
-      .then(res => { if (!res.ok) throw new Error('bad status'); return res.json() })
+    api.get('/api/public/programs', { signal: controller.signal })
+      .then(res => res.data)
       .then(programs => {
         const byTrack = {}
         programs.forEach(p => {
@@ -145,6 +146,146 @@ function ProgramFinder() {
   )
 }
 
+/* ── Testimonials ───────────────────────────────────────── */
+function Testimonials() {
+  const [items, setItems] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ name: '', program: '', email: '', whatsapp: '', content: '' })
+  const [photo, setPhoto] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.get('/api/public/testimonials')
+      .then(res => setItems(res.data))
+      .catch(() => {}) // section still works empty
+  }, [])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async e => {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+    try {
+      const fd = new FormData()
+      Object.entries(form).forEach(([k, v]) => fd.append(k, v))
+      if (photo) fd.append('photo', photo)
+      await api.post('/api/public/testimonials', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setSubmitted(true)
+      setForm({ name: '', program: '', email: '', whatsapp: '', content: '' })
+      setPhoto(null)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fafafa', fontFamily: 'inherit' }
+
+  return (
+    <section id="testimonials" className="am-section-pad" style={{ background: '#fff', padding: '96px 0' }}>
+      <div className="am-section-inner" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px' }}>
+        <div className="am-section-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 52, flexWrap: 'wrap', gap: 20 }}>
+          <div>
+            <h2 style={{ fontSize: 36, fontWeight: 800, color: '#0f172a', margin: '0 0 10px', letterSpacing: '-0.5px' }}>
+              What Our <span style={{ color: 'var(--brand-teal-deep)' }}>Learners Say</span>
+            </h2>
+            <p style={{ fontSize: 16, color: '#64748b', margin: 0 }}>Real feedback from people who've been through our programs</p>
+          </div>
+          <button onClick={() => { setShowForm(s => !s); setSubmitted(false) }}
+            style={{ fontSize: 14, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', border: 'none', cursor: 'pointer', padding: '12px 24px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+            {showForm ? 'Close' : 'Share Your Testimonial'}
+          </button>
+        </div>
+
+        {showForm && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 20, padding: '32px 36px', marginBottom: 52, maxWidth: 640 }}>
+            {submitted ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', marginBottom: 4 }}>Thank you for sharing!</p>
+                <p style={{ fontSize: 13.5, color: '#64748b' }}>Your testimonial will appear here once our team reviews it.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Full name</label>
+                    <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Your name" required style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Program taken</label>
+                    <input value={form.program} onChange={e => set('program', e.target.value)} placeholder="e.g. Mentorship Program" required style={inputStyle} />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Email</label>
+                    <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@email.com" required style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>WhatsApp / Mobile Number</label>
+                    <input type="tel" value={form.whatsapp} onChange={e => set('whatsapp', e.target.value)} placeholder="+91 98765 43210" required style={inputStyle} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Photo (optional)</label>
+                  <input type="file" accept="image/*" onChange={e => setPhoto(e.target.files?.[0] || null)} style={{ fontSize: 13.5 }} />
+                </div>
+                <div style={{ marginBottom: 18 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Your testimonial</label>
+                  <textarea value={form.content} onChange={e => set('content', e.target.value)} placeholder="Tell us about your experience…" required rows={4}
+                    style={{ ...inputStyle, resize: 'vertical' }} />
+                </div>
+                {error && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 14 }}>{error}</p>}
+                <button type="submit" disabled={submitting}
+                  style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', cursor: submitting ? 'not-allowed' : 'pointer',
+                    background: submitting ? '#93c5fd' : 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))',
+                    color: '#fff', fontSize: 14.5, fontWeight: 700 }}>
+                  {submitting ? 'Submitting…' : 'Submit Testimonial'}
+                </button>
+                <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 10, textAlign: 'center' }}>
+                  Your email and WhatsApp number are kept private — only your name, photo, program, and testimonial are shown publicly.
+                </p>
+              </form>
+            )}
+          </div>
+        )}
+
+        {items.length === 0 ? (
+          <p style={{ fontSize: 14.5, color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>
+            No testimonials yet — be the first to share your story!
+          </p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
+            {items.map((t, i) => (
+              <div key={i} style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 20, padding: '26px 24px' }}>
+                <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, margin: '0 0 20px', fontStyle: 'italic' }}>"{t.content}"</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {t.photo_url ? (
+                    <img src={t.photo_url} alt={t.name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg,var(--brand-navy),#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 15 }}>
+                      {t.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>{t.name}</p>
+                    <p style={{ fontSize: 12.5, color: 'var(--brand-teal-deep)', fontWeight: 600, margin: 0 }}>{t.program}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 /* ── Page ───────────────────────────────────────────────── */
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -156,7 +297,7 @@ export default function Home() {
     return () => window.removeEventListener('resize', handler)
   }, [])
 
-  const NAV_LINKS = ['Home', 'Programs', 'Mentors', 'Live Sessions', 'About']
+  const NAV_LINKS = ['Home', 'Programs', 'Mentors', 'Testimonials']
 
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: '#fff' }}>
@@ -380,6 +521,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <Testimonials />
 
       {/* ════ CTA ════ */}
       <section className="am-cta-section" style={{ padding: '60px 32px' }}>
