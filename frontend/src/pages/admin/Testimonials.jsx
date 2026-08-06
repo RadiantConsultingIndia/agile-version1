@@ -10,8 +10,11 @@ const STATUS_STYLE = {
 }
 
 export default function AdminTestimonials() {
-  const [items,  setItems]  = useState([])
-  const [filter, setFilter] = useState('pending')
+  const [items,    setItems]    = useState([])
+  const [filter,   setFilter]   = useState('pending')
+  const [expanded, setExpanded] = useState({})
+
+  const toggleExpand = id => setExpanded(e => ({ ...e, [id]: !e[id] }))
 
   useEffect(() => {
     api.get('/api/admin/testimonials').then(r => setItems(r.data)).catch(() => {})
@@ -103,7 +106,13 @@ export default function AdminTestimonials() {
                   </td>
                   <td style={{ padding: '14px 20px', fontSize: 13, color: '#64748b' }}>{t.program}</td>
                   <td style={{ padding: '14px 20px', fontSize: 13, color: '#374151', maxWidth: 320 }}>
-                    <span style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.content}</span>
+                    <span style={expanded[t.id] ? {} : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.content}</span>
+                    {t.content.length > 140 && (
+                      <button onClick={() => toggleExpand(t.id)}
+                        style={{ display: 'block', marginTop: 6, fontSize: 12, fontWeight: 600, color: 'var(--brand-teal-deep, #0f766e)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                        {expanded[t.id] ? 'Show less' : 'Read full testimonial'}
+                      </button>
+                    )}
                   </td>
                   <td style={{ padding: '14px 20px', fontSize: 12, color: '#64748b' }}>
                     <div>{t.email}</div>
