@@ -19,6 +19,7 @@ import AdminUsers from './pages/admin/Users'
 import AdminAttendance from './pages/admin/Attendance'
 import AdminResources from './pages/admin/Resources'
 import AdminAnalytics from './pages/admin/Analytics'
+import AdminTestimonials from './pages/admin/Testimonials'
 
 import MentorDashboard from './pages/mentor/Dashboard'
 import MentorProfile from './pages/mentor/Profile'
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/admin/attendance" element={<PrivateRoute role="admin"><AdminAttendance /></PrivateRoute>} />
           <Route path="/admin/resources" element={<PrivateRoute role="admin"><AdminResources /></PrivateRoute>} />
           <Route path="/admin/analytics" element={<PrivateRoute role="admin"><AdminAnalytics /></PrivateRoute>} />
+          <Route path="/admin/testimonials" element={<PrivateRoute role="admin"><AdminTestimonials /></PrivateRoute>} />
 
           <Route path="/mentor/dashboard" element={<PrivateRoute role="mentor"><MentorDashboard /></PrivateRoute>} />
           <Route path="/mentor/profile" element={<PrivateRoute role="mentor"><MentorProfile /></PrivateRoute>} />
