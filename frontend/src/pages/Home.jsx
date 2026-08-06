@@ -575,14 +575,31 @@ export default function Home() {
               </p>
             </div>
             {[
-              { title: 'Platform', links: ['Programs', 'Live Sessions', 'Mentors', 'Certificates'] },
-              { title: 'Company', links: ['About Us', 'Careers', 'Blog', 'Contact'] },
-              { title: 'Support', links: ['Help Center', 'Privacy Policy', 'Terms of Use'] },
+              { title: 'Platform', links: [
+                { label: 'Programs', href: '#programs' },
+                { label: 'Mentors', href: '#mentors' },
+                { label: 'Testimonials', href: '#testimonials' },
+                { label: 'Get Started', href: '/signup/mentee' },
+              ] },
+              { title: 'Company', links: [
+                { label: 'About Us', href: 'https://radiantconsultingindia.com/about.html', external: true },
+                { label: 'Corporate Training', href: 'https://radiantconsultingindia.com/corporate.html', external: true },
+                { label: 'Contact', href: 'https://radiantconsultingindia.com/contact.html', external: true },
+              ] },
+              { title: 'Support', links: [
+                { label: 'WhatsApp Us', href: 'https://wa.me/919071215571', external: true },
+                { label: 'Email Us', href: 'mailto:contact@radiantconsultingindia.com', external: true },
+              ] },
             ].map(col => (
               <div key={col.title}>
                 <p style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: '0 0 18px' }}>{col.title}</p>
                 {col.links.map(l => (
-                  <a key={l} href="#" style={{ display: 'block', fontSize: 14, color: '#64748b', textDecoration: 'none', marginBottom: 12 }}>{l}</a>
+                  l.href.startsWith('/') ? (
+                    <Link key={l.label} to={l.href} style={{ display: 'block', fontSize: 14, color: '#64748b', textDecoration: 'none', marginBottom: 12 }}>{l.label}</Link>
+                  ) : (
+                    <a key={l.label} href={l.href} target={l.external ? '_blank' : undefined} rel={l.external ? 'noopener' : undefined}
+                      style={{ display: 'block', fontSize: 14, color: '#64748b', textDecoration: 'none', marginBottom: 12 }}>{l.label}</a>
+                  )
                 ))}
               </div>
             ))}
