@@ -155,6 +155,9 @@ function Testimonials() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
+  const [expandedCards, setExpandedCards] = useState({})
+
+  const toggleCard = i => setExpandedCards(e => ({ ...e, [i]: !e[i] }))
 
   useEffect(() => {
     api.get('/api/public/testimonials')
@@ -262,8 +265,17 @@ function Testimonials() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
             {items.map((t, i) => (
-              <div key={i} style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 20, padding: '26px 24px' }}>
-                <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, margin: '0 0 20px', fontStyle: 'italic' }}>"{t.content}"</p>
+              <div key={i} style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 20, padding: '26px 24px', display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, margin: t.content.length > 160 ? '0 0 4px' : '0 0 20px', fontStyle: 'italic', flex: 1,
+                  ...(expandedCards[i] ? {} : { display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}>
+                  "{t.content}"
+                </p>
+                {t.content.length > 160 && (
+                  <button onClick={() => toggleCard(i)}
+                    style={{ alignSelf: 'flex-start', marginBottom: 16, fontSize: 12.5, fontWeight: 700, color: 'var(--brand-teal-deep)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    {expandedCards[i] ? 'Read less' : 'Read more'}
+                  </button>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   {t.photo_url ? (
                     <img src={t.photo_url} alt={t.name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
