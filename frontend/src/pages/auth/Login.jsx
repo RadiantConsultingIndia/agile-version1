@@ -4,11 +4,38 @@ import { useAuth } from '../../context/AuthContext'
 
 const ROLES = ['Mentee', 'Mentor', 'Admin']
 
-const LEFT_STATS = [
-  { emoji: '🚀', label: 'Mentees', sub: 'Already learning on AgileMentor' },
-  { emoji: '🎯', label: 'Live Sessions', sub: 'Every month across all programs' },
-  { emoji: '🏆', label: 'Satisfaction', sub: 'From our mentee community', suffix: '%' },
-]
+const LEFT_CONTENT = {
+  Mentee: {
+    badge: 'Welcome Back',
+    headline: ['Continue your ', 'Agile', ' journey today.'],
+    sub: 'Access your programs, sessions, and mentors — all in one place.',
+    stats: [
+      { emoji: '🚀', label: 'Real-World Projects', sub: 'Work with actual Agile teams, not simulations' },
+      { emoji: '🎯', label: 'Live Sessions', sub: 'Regular sessions across all programs' },
+      { emoji: '🏆', label: 'Feedback', sub: 'From our mentee community' },
+    ],
+  },
+  Mentor: {
+    badge: 'Welcome Back, Mentor',
+    headline: ['Continue ', 'shaping careers', ' today.'],
+    sub: 'Access your mentees, sessions, and certificates — all in one place.',
+    stats: [
+      { emoji: '🧑‍🏫', label: 'Your Mentees', sub: 'Guide learners matched to your expertise' },
+      { emoji: '📅', label: 'Your Sessions', sub: 'Bi-weekly 1:1s on your own schedule' },
+      { emoji: '🏅', label: 'Your Impact', sub: 'Feedback and reviews from your mentees' },
+    ],
+  },
+  Admin: {
+    badge: 'Admin Access',
+    headline: ['Manage the ', 'AgileMentor', ' platform.'],
+    sub: 'Programs, sessions, users, and analytics — all in one place.',
+    stats: [
+      { emoji: '📚', label: 'Programs & Sessions', sub: 'Manage the full course catalog' },
+      { emoji: '👥', label: 'Users', sub: 'Approve mentors and manage accounts' },
+      { emoji: '📊', label: 'Analytics', sub: 'Track platform-wide activity' },
+    ],
+  },
+}
 
 const S = {
   page: { display: 'flex', flexDirection: 'column', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" },
@@ -57,7 +84,7 @@ export default function Login() {
       <div className="am-auth-page" style={S.page}>
         <TopBar />
         <div className="am-auth-row" style={S.row}>
-          <LeftPanel />
+          <LeftPanel role={role} />
           <div className="am-auth-right" style={S.right}>
             <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
               <div style={{ fontSize: 56, marginBottom: 20 }}>⏳</div>
@@ -80,7 +107,7 @@ export default function Login() {
     <div className="am-auth-page" style={S.page}>
       <TopBar />
       <div className="am-auth-row" style={S.row}>
-        <LeftPanel />
+        <LeftPanel role={role} />
 
         <div className="am-auth-right" style={S.right}>
           <div style={{ width: '100%', maxWidth: 460 }}>
@@ -211,7 +238,8 @@ function TopBar() {
   )
 }
 
-function LeftPanel() {
+function LeftPanel({ role }) {
+  const c = LEFT_CONTENT[role] || LEFT_CONTENT.Mentee
   return (
     <div className="am-auth-left" style={S.left}>
       {/* bg glow */}
@@ -232,30 +260,30 @@ function LeftPanel() {
       </div>
 
       {/* Badge */}
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 50, padding: '7px 16px', marginBottom: 28, alignSelf: 'flex-start' }}>
+      <div key={c.badge} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 50, padding: '7px 16px', marginBottom: 28, alignSelf: 'flex-start' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#60a5fa', display: 'inline-block' }} />
-        <span style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>Welcome Back</span>
+        <span style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>{c.badge}</span>
       </div>
 
       <h1 style={{ fontSize: 38, fontWeight: 900, color: '#fff', lineHeight: 1.15, margin: '0 0 16px', letterSpacing: '-0.5px' }}>
-        Continue your{' '}
-        <span style={{ color: '#60a5fa' }}>Agile</span>
-        {' '}journey today.
+        {c.headline[0]}
+        <span style={{ color: '#60a5fa' }}>{c.headline[1]}</span>
+        {c.headline[2]}
       </h1>
 
       <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.7, margin: '0 0 44px', maxWidth: 340 }}>
-        Access your programs, sessions, and mentors — all in one place.
+        {c.sub}
       </p>
 
       {/* Stat cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {LEFT_STATS.map(s => (
+        {c.stats.map(s => (
           <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 16, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '16px 20px' }}>
             <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(135deg,var(--brand-navy),var(--brand-navy-deep))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: '0 4px 12px rgba(29,78,216,0.4)' }}>
               {s.emoji}
             </div>
             <div>
-              <p style={{ color: '#fff', fontWeight: 700, fontSize: 15, margin: '0 0 2px' }}>-- {s.label}</p>
+              <p style={{ color: '#fff', fontWeight: 700, fontSize: 15, margin: '0 0 2px' }}>{s.label}</p>
               <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>{s.sub}</p>
             </div>
           </div>
