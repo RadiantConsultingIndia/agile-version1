@@ -4,9 +4,10 @@ import api from '../../api/client'
 import { toast } from '../../utils/toast'
 
 const ROLE_STYLE = {
-  mentor:  { bg: '#f0fdfa', color: '#0f766e', label: 'Mentor' },
-  mentee:  { bg: '#f5f3ff', color: '#6d28d9', label: 'Mentee' },
-  admin:   { bg: '#fef2f2', color: '#be123c', label: 'Admin'  },
+  mentor:   { bg: '#f0fdfa', color: '#0f766e', label: 'Mentor' },
+  mentee:   { bg: '#f5f3ff', color: '#6d28d9', label: 'Mentee' },
+  admin:    { bg: '#fef2f2', color: '#be123c', label: 'Admin'  },
+  employer: { bg: '#eff6ff', color: '#1d4ed8', label: 'Employer' },
 }
 
 export default function AdminUsers() {
