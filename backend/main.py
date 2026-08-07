@@ -52,16 +52,21 @@ from models.ai_interview_practice_access import AIInterviewPracticeAccess
 from models.ai_interview_usage_log import AIInterviewUsageLog
 from models.testimonial import Testimonial
 from models.employer_profile import EmployerProfile
+from models.assessment import Assessment
+from models.candidate_invite import CandidateInvite
+from models.employer_credits import EmployerAssessmentCredits
+from models.hire_usage_log import HireUsageLog
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
     enrollment_request_admin_email, enrollment_approved_email, enrollment_rejected_email,
-    certificate_earned_email,
+    certificate_earned_email, assessment_invite_email,
 )
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 ALLOWED_ORIGINS = [o.strip() for o in FRONTEND_URL.split(",") if o.strip()]
+HIRE_FRONTEND_URL = os.getenv("HIRE_FRONTEND_URL", "http://localhost:5174")
 PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
@@ -164,6 +169,9 @@ def generate_mentor_id(db) -> str:
 
 def generate_employer_profile_id(db) -> str:
     return _unique_id(db, EmployerProfile, EmployerProfile.employer_profile_id, "EMP", 4)
+
+def generate_assessment_id(db) -> str:
+    return _unique_id(db, Assessment, Assessment.assessment_id, "ASM", 4)
 
 def generate_program_id(db) -> str:
     return _unique_id(db, Program, Program.program_id, "PRG", 4)
@@ -647,11 +655,13 @@ def admin_get_users(current_user: User = Depends(require_admin), db: Session = D
     users = db.query(User).filter(User.role != "admin").all()
     credits_by_user = {a.user_id: a.credits_remaining for a in db.query(AIInterviewAccess).all()}
     practice_credits_by_user = {a.user_id: a.credits_remaining for a in db.query(AIInterviewPracticeAccess).all()}
+    hire_credits_by_user = {a.user_id: a.credits_remaining for a in db.query(EmployerAssessmentCredits).all()}
     return [{"user_id": u.user_id, "full_name": u.full_name, "email": u.email,
              "role": u.role, "status": u.status, "created_at": str(u.created_at),
              "profile_photo": u.profile_photo,
              "ai_interview_credits": credits_by_user.get(u.user_id, 0),
-             "ai_interview_practice_credits": practice_credits_by_user.get(u.user_id, 0)} for u in users]
+             "ai_interview_practice_credits": practice_credits_by_user.get(u.user_id, 0),
+             "hire_credits": hire_credits_by_user.get(u.user_id, 0)} for u in users]
 
 @app.post("/api/admin/users/{user_id}/approve")
 def admin_approve_user(user_id: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -724,6 +734,15 @@ def admin_delete_user(user_id: str, current_user: User = Depends(require_admin),
     db.query(Resource).filter(Resource.uploaded_by == user_id).delete()
     db.query(AIInterviewAccess).filter(AIInterviewAccess.user_id == user_id).delete()
     db.query(AIInterviewPracticeAccess).filter(AIInterviewPracticeAccess.user_id == user_id).delete()
+
+    employer_assessment_ids = [a.assessment_id for a in db.query(Assessment).filter(Assessment.employer_user_id == user_id).all()]
+    if employer_assessment_ids:
+        db.query(HireUsageLog).filter(HireUsageLog.assessment_id.in_(employer_assessment_ids)).delete(synchronize_session=False)
+        db.query(CandidateInvite).filter(CandidateInvite.assessment_id.in_(employer_assessment_ids)).delete(synchronize_session=False)
+        db.query(Assessment).filter(Assessment.employer_user_id == user_id).delete(synchronize_session=False)
+    db.query(HireUsageLog).filter(HireUsageLog.employer_user_id == user_id).delete()
+    db.query(EmployerAssessmentCredits).filter(EmployerAssessmentCredits.user_id == user_id).delete()
+    db.query(EmployerProfile).filter(EmployerProfile.user_id == user_id).delete()
 
     user = db.query(User).filter(User.user_id == user_id).first()
     if user:
@@ -1838,6 +1857,160 @@ def update_employer_profile(body: EmployerProfileBody, current_user: User = Depe
     profile.company_size = body.company_size
     db.commit()
     return {"success": True}
+
+ROLE_FOCUS_LABELS = {
+    "scrum_master": "Scrum Master",
+    "project_manager": "Project Manager",
+    "product_owner": "Product Owner",
+    "business_analyst": "Business Analyst",
+}
+INVITE_EXPIRY_DAYS = 14
+
+class AssessmentBody(BaseModel):
+    title: str
+    role_focus: str
+
+class AssessmentPatchBody(BaseModel):
+    title: Optional[str] = None
+    status: Optional[str] = None
+
+class CandidateInviteBody(BaseModel):
+    candidate_name: str
+    candidate_email: str
+
+def _get_owned_assessment(assessment_id: str, current_user: User, db: Session) -> Assessment:
+    assessment = db.query(Assessment).filter(
+        Assessment.assessment_id == assessment_id,
+        Assessment.employer_user_id == current_user.user_id,
+    ).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return assessment
+
+@app.get("/api/employer/credits")
+def get_employer_credits(current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    access = db.query(EmployerAssessmentCredits).filter(EmployerAssessmentCredits.user_id == current_user.user_id).first()
+    return {"credits_remaining": access.credits_remaining if access else 0}
+
+@app.get("/api/employer/assessments")
+def list_assessments(current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    assessments = db.query(Assessment).filter(Assessment.employer_user_id == current_user.user_id).order_by(Assessment.created_at.desc()).all()
+    result = []
+    for a in assessments:
+        invites = db.query(CandidateInvite).filter(CandidateInvite.assessment_id == a.assessment_id).all()
+        result.append({
+            "assessment_id": a.assessment_id, "title": a.title, "role_focus": a.role_focus,
+            "role_focus_label": ROLE_FOCUS_LABELS.get(a.role_focus, a.role_focus),
+            "status": a.status, "created_at": a.created_at.isoformat() if a.created_at else None,
+            "invited_count": len(invites),
+            "completed_count": sum(1 for i in invites if i.status == "completed"),
+        })
+    return result
+
+@app.post("/api/employer/assessments")
+def create_assessment(body: AssessmentBody, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    if body.role_focus not in ROLE_FOCUS_LABELS:
+        raise HTTPException(status_code=400, detail="Invalid role_focus")
+    if not body.title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
+    assessment = Assessment(
+        assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
+        title=body.title.strip(), role_focus=body.role_focus,
+    )
+    db.add(assessment)
+    db.commit()
+    return {"success": True, "assessment_id": assessment.assessment_id}
+
+@app.get("/api/employer/assessments/{assessment_id}")
+def get_assessment(assessment_id: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    assessment = _get_owned_assessment(assessment_id, current_user, db)
+    invites = db.query(CandidateInvite).filter(CandidateInvite.assessment_id == assessment_id).order_by(CandidateInvite.created_at.desc()).all()
+    return {
+        "assessment_id": assessment.assessment_id, "title": assessment.title, "role_focus": assessment.role_focus,
+        "role_focus_label": ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus),
+        "status": assessment.status, "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
+        "candidates": [{
+            "invite_token": i.invite_token, "candidate_name": i.candidate_name, "candidate_email": i.candidate_email,
+            "status": i.status, "created_at": i.created_at.isoformat() if i.created_at else None,
+        } for i in invites],
+    }
+
+@app.patch("/api/employer/assessments/{assessment_id}")
+def patch_assessment(assessment_id: str, body: AssessmentPatchBody, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    assessment = _get_owned_assessment(assessment_id, current_user, db)
+    if body.title is not None:
+        assessment.title = body.title.strip()
+    if body.status is not None:
+        if body.status not in ("active", "archived"):
+            raise HTTPException(status_code=400, detail="Invalid status")
+        assessment.status = body.status
+    db.commit()
+    return {"success": True}
+
+@app.post("/api/employer/assessments/{assessment_id}/invites")
+def invite_candidate(assessment_id: str, body: CandidateInviteBody, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    assessment = _get_owned_assessment(assessment_id, current_user, db)
+    if not validate_generic_email(body.candidate_email):
+        raise HTTPException(status_code=400, detail="Invalid candidate email address")
+    if not body.candidate_name.strip():
+        raise HTTPException(status_code=400, detail="Candidate name is required")
+
+    access = db.query(EmployerAssessmentCredits).filter(EmployerAssessmentCredits.user_id == current_user.user_id).first()
+    if not access or access.credits_remaining <= 0:
+        raise HTTPException(status_code=402, detail="You've used all your candidate invite credits. Please contact us to unlock more.")
+
+    invite = CandidateInvite(
+        invite_token=secrets.token_urlsafe(32), assessment_id=assessment_id,
+        candidate_name=body.candidate_name.strip(), candidate_email=body.candidate_email.lower(),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS),
+    )
+    db.add(invite)
+    access.credits_remaining -= 1
+    db.add(HireUsageLog(employer_user_id=current_user.user_id, assessment_id=assessment_id, invite_token=invite.invite_token, event_type="invite_sent"))
+    db.commit()
+
+    take_link = f"{HIRE_FRONTEND_URL}/take/{invite.invite_token}"
+    role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus)
+    employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == current_user.user_id).first()
+    company_name = employer_profile.company_name if employer_profile else "A company"
+    html = assessment_invite_email(invite.candidate_name, company_name, role_label, take_link)
+    threading.Thread(target=send_email, args=(invite.candidate_email, f"You're invited: {role_label} Assessment", html)).start()
+
+    return {"success": True, "invite_token": invite.invite_token, "credits_remaining": access.credits_remaining}
+
+@app.get("/api/public/hire/{invite_token}")
+def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="This assessment link is invalid.")
+    if invite.status in ("completed", "expired") or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="This assessment link has expired or already been completed.")
+    assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
+    employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
+    return {
+        "candidate_name": invite.candidate_name,
+        "company_name": employer_profile.company_name if employer_profile else "the company",
+        "role_focus": assessment.role_focus if assessment else None,
+        "role_focus_label": ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus) if assessment else None,
+        "status": invite.status,
+        "expires_at": invite.expires_at.isoformat(),
+    }
+
+@app.post("/api/admin/users/{user_id}/hire-credits")
+def admin_set_hire_credits(user_id: str, credits: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if credits < 0:
+        raise HTTPException(status_code=400, detail="Credits cannot be negative")
+    user = db.query(User).filter(User.user_id == user_id, User.role == "employer").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Employer not found")
+    access = db.query(EmployerAssessmentCredits).filter(EmployerAssessmentCredits.user_id == user_id).first()
+    if access:
+        access.credits_remaining = credits
+    else:
+        access = EmployerAssessmentCredits(user_id=user_id, credits_remaining=credits)
+        db.add(access)
+    db.commit()
+    return {"success": True, "user_id": user_id, "credits_remaining": credits}
 
 # Alias used by mentee Browse Programs page
 @app.get("/api/mentee/programs/browse")

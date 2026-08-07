@@ -256,6 +256,34 @@ def certificate_earned_email(full_name: str, program_title: str) -> str:
     """
 
 
+def assessment_invite_email(candidate_name: str, company_name: str, role_focus_label: str, take_link: str) -> str:
+    return f"""
+    <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
+      <div style="background:linear-gradient(135deg,#0F2645,#1a3a6b);padding:32px 36px;">
+        <div style="font-size:1.2rem;font-weight:800;color:white;letter-spacing:-0.3px;">Agile<span style="color:#60A5FA;">Hire</span></div>
+      </div>
+      <div style="padding:36px;">
+        <div style="display:inline-block;padding:4px 12px;background:#EEF2FF;color:#4338CA;font-size:0.75rem;font-weight:700;border-radius:20px;margin-bottom:16px;">
+          🎯 HIRING ASSESSMENT
+        </div>
+        <h2 style="font-size:1.3rem;font-weight:700;color:#0F2645;margin-bottom:8px;">You've been invited to an assessment</h2>
+        <p style="font-size:0.9rem;color:#64748B;margin-bottom:24px;line-height:1.6;">
+          Hi {candidate_name}, <strong>{company_name}</strong> has invited you to complete a short {role_focus_label} hiring assessment.
+          It takes about 10-15 minutes and covers 5 realistic scenario questions — no account or download needed.
+        </p>
+        <a href="{take_link}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#2563EB,#0EA5E9);color:white;font-weight:700;font-size:0.9rem;border-radius:10px;text-decoration:none;">
+          Start Assessment →
+        </a>
+        <p style="font-size:0.78rem;color:#94A3B8;margin-top:24px;line-height:1.6;">
+          This link is unique to you and expires in 14 days. If you weren't expecting this, you can safely ignore this email.
+        </p>
+        <hr style="border:none;border-top:1px solid #E2E8F4;margin:24px 0;"/>
+        <p style="font-size:0.75rem;color:#CBD5E1;">© 2026 AgileHire, a product of Radiant Consulting.</p>
+      </div>
+    </div>
+    """
+
+
 def otp_verification_email(full_name: str, otp_code: str) -> str:
     return f"""
     <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
