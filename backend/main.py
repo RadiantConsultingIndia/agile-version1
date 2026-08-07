@@ -51,6 +51,7 @@ from models.ai_interview_access import AIInterviewAccess
 from models.ai_interview_practice_access import AIInterviewPracticeAccess
 from models.ai_interview_usage_log import AIInterviewUsageLog
 from models.testimonial import Testimonial
+from models.employer_profile import EmployerProfile
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
@@ -121,6 +122,11 @@ def validate_email(email: str) -> bool:
     domain = email.split("@")[1].lower()
     return any(domain == d or domain.endswith("." + d) for d in ALLOWED_DOMAINS)
 
+def validate_generic_email(email: str) -> bool:
+    """Format-only email check, no domain whitelist — for employer/corporate emails that validate_email() would wrongly reject."""
+    pattern = r'^[\w\.-]+@[\w\.-]+\.\w{2,}$'
+    return bool(re.match(pattern, email))
+
 def validate_password(password: str) -> bool:
     return len(password) >= 6 and password[0].isupper()
 
@@ -155,6 +161,9 @@ def generate_user_id(db) -> str:
 
 def generate_mentor_id(db) -> str:
     return _unique_id(db, Mentor, Mentor.mentor_profile_id, "MTR", 4)
+
+def generate_employer_profile_id(db) -> str:
+    return _unique_id(db, EmployerProfile, EmployerProfile.employer_profile_id, "EMP", 4)
 
 def generate_program_id(db) -> str:
     return _unique_id(db, Program, Program.program_id, "PRG", 4)
@@ -251,6 +260,11 @@ def require_mentee(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Mentee access required")
     return current_user
 
+def require_employer(current_user: User = Depends(get_current_user)):
+    if not current_user or current_user.role != "employer":
+        raise HTTPException(status_code=403, detail="Employer access required")
+    return current_user
+
 
 # ── PYDANTIC REQUEST MODELS ───────────────────────────────────────────────────
 
@@ -259,6 +273,9 @@ class SignupBody(BaseModel):
     email: str
     password: str
     invite_code: Optional[str] = None
+    company_name: Optional[str] = None
+    industry: Optional[str] = None
+    company_size: Optional[str] = None
 
 class LoginBody(BaseModel):
     email: str
@@ -428,12 +445,17 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
     if role.lower() == "admin":
         raise HTTPException(status_code=403, detail="Admin accounts cannot be created publicly.")
 
-    if not validate_email(body.email):
+    if role.lower() == "employer":
+        if not validate_generic_email(body.email):
+            raise HTTPException(status_code=400, detail="Invalid email address.")
+    elif not validate_email(body.email):
         raise HTTPException(status_code=400, detail="Invalid email. Use gmail.com, yahoo.com, ac.in etc.")
     if not validate_password(body.password):
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters and start with a capital letter")
     if db.query(User).filter(func.lower(User.email) == body.email.lower()).first():
         raise HTTPException(status_code=400, detail="Email already registered")
+    if role.lower() == "employer" and not body.company_name:
+        raise HTTPException(status_code=400, detail="Company name is required")
 
     user_id = generate_user_id(db)
     user = User(
@@ -446,6 +468,12 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
     if role == "mentor":
         mentor = Mentor(mentor_profile_id=generate_mentor_id(db), user_id=user_id)
         db.add(mentor)
+    elif role == "employer":
+        employer_profile = EmployerProfile(
+            employer_profile_id=generate_employer_profile_id(db), user_id=user_id,
+            company_name=body.company_name, industry=body.industry, company_size=body.company_size,
+        )
+        db.add(employer_profile)
 
     db.commit()
 
@@ -454,7 +482,8 @@ def signup(role: str, body: SignupBody, db: Session = Depends(get_db)):
 @app.post("/api/auth/login/{role}")
 @limiter.limit("5/minute")
 def login(role: str, request: Request, body: LoginBody, db: Session = Depends(get_db)):
-    if not validate_email(body.email):
+    email_valid = validate_generic_email(body.email) if role.lower() == "employer" else validate_email(body.email)
+    if not email_valid:
         raise HTTPException(status_code=400, detail="Invalid email")
     user = db.query(User).filter(func.lower(User.email) == body.email.lower()).first()
     if not user:
@@ -1780,6 +1809,35 @@ def ai_interview_report(request: Request, body: AIInterviewReportBody, current_u
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=ai-interview-report.pdf"},
     )
+
+# ── HIRE ASSESSMENT (agile-hire, hire.radiantconsultingindia.com) ─────────────
+
+class EmployerProfileBody(BaseModel):
+    company_name: str
+    industry: Optional[str] = None
+    company_size: Optional[str] = None
+
+@app.get("/api/employer/profile")
+def get_employer_profile(current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == current_user.user_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Employer profile not found")
+    return {
+        "full_name": current_user.full_name, "email": current_user.email,
+        "company_name": profile.company_name, "industry": profile.industry,
+        "company_size": profile.company_size,
+    }
+
+@app.put("/api/employer/profile")
+def update_employer_profile(body: EmployerProfileBody, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == current_user.user_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Employer profile not found")
+    profile.company_name = body.company_name
+    profile.industry = body.industry
+    profile.company_size = body.company_size
+    db.commit()
+    return {"success": True}
 
 # Alias used by mentee Browse Programs page
 @app.get("/api/mentee/programs/browse")
