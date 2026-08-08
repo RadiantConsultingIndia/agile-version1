@@ -56,6 +56,7 @@ from models.assessment import Assessment
 from models.candidate_invite import CandidateInvite
 from models.employer_credits import EmployerAssessmentCredits
 from models.hire_usage_log import HireUsageLog
+from models.candidate_result import CandidateResult
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
@@ -76,6 +77,9 @@ Base.metadata.create_all(bind=engine)
 with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "AIInterviewAccess" ADD COLUMN IF NOT EXISTS credits_remaining INTEGER DEFAULT 0'))
     _conn.execute(text('UPDATE "AIInterviewAccess" SET credits_remaining = 20 WHERE has_access = true AND credits_remaining = 0'))
+    _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)'))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS require_id_upload BOOLEAN DEFAULT FALSE'))
+    _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS id_photo_url VARCHAR(500)'))
     _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -172,6 +176,9 @@ def generate_employer_profile_id(db) -> str:
 
 def generate_assessment_id(db) -> str:
     return _unique_id(db, Assessment, Assessment.assessment_id, "ASM", 4)
+
+def generate_result_id(db) -> str:
+    return _unique_id(db, CandidateResult, CandidateResult.result_id, "ATP", 4)
 
 def generate_program_id(db) -> str:
     return _unique_id(db, Program, Program.program_id, "PRG", 4)
@@ -737,6 +744,9 @@ def admin_delete_user(user_id: str, current_user: User = Depends(require_admin),
 
     employer_assessment_ids = [a.assessment_id for a in db.query(Assessment).filter(Assessment.employer_user_id == user_id).all()]
     if employer_assessment_ids:
+        employer_invite_tokens = [i.invite_token for i in db.query(CandidateInvite).filter(CandidateInvite.assessment_id.in_(employer_assessment_ids)).all()]
+        if employer_invite_tokens:
+            db.query(CandidateResult).filter(CandidateResult.invite_token.in_(employer_invite_tokens)).delete(synchronize_session=False)
         db.query(HireUsageLog).filter(HireUsageLog.assessment_id.in_(employer_assessment_ids)).delete(synchronize_session=False)
         db.query(CandidateInvite).filter(CandidateInvite.assessment_id.in_(employer_assessment_ids)).delete(synchronize_session=False)
         db.query(Assessment).filter(Assessment.employer_user_id == user_id).delete(synchronize_session=False)
@@ -1844,7 +1854,7 @@ def get_employer_profile(current_user: User = Depends(require_employer), db: Ses
     return {
         "full_name": current_user.full_name, "email": current_user.email,
         "company_name": profile.company_name, "industry": profile.industry,
-        "company_size": profile.company_size,
+        "company_size": profile.company_size, "logo_url": profile.logo_url,
     }
 
 @app.put("/api/employer/profile")
@@ -1869,14 +1879,73 @@ INVITE_EXPIRY_DAYS = 14
 class AssessmentBody(BaseModel):
     title: str
     role_focus: str
+    require_id_upload: bool = False
 
 class AssessmentPatchBody(BaseModel):
     title: Optional[str] = None
     status: Optional[str] = None
+    require_id_upload: Optional[bool] = None
 
 class CandidateInviteBody(BaseModel):
     candidate_name: str
     candidate_email: str
+
+class HireMessageBody(BaseModel):
+    messages: list[AIInterviewMessage]
+
+class HireSubmitBody(BaseModel):
+    messages: list[AIInterviewMessage]
+    paste_detected: bool = False
+    tab_switch_count: int = 0
+    fast_answer_count: int = 0
+
+def _build_hire_system_prompt(company_name: str, role_focus_label: str) -> str:
+    return f"""You are conducting a scenario-based hiring assessment on behalf of {company_name} for a {role_focus_label} position. This is a real hiring evaluation, not a practice session — the candidate's answers will be scored and shared with the hiring team, so stay professional, neutral, and encouraging, but do not coach, hint, or give feedback on answer quality during the conversation.
+
+Ask exactly 5 scenario-based questions, one at a time, covering realistic on-the-job situations for a {role_focus_label} (e.g. conflicting stakeholder priorities, a team missing sprint commitments, scope creep, a blocked team member, prioritization trade-offs). Invent fresh, specific scenario details each time (team names, numbers, concrete situations) rather than generic textbook phrasing, so each assessment feels distinct. After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next scenario.") — never a rating, score, or evaluative comment — then ask the next question.
+
+After the candidate answers the 5th and final question, thank them warmly, let them know {company_name} will review responses and follow up if there's a match, and do NOT reveal any score. Immediately after that, on its own with nothing else before or after it, append the exact literal text [[ASSESSMENT_COMPLETE]] — a hidden marker for the app only; never mention it.
+
+Keep every response conversational and concise."""
+
+def _build_hire_scoring_system_prompt(company_name: str, role_focus_label: str) -> str:
+    return f"""You are an expert Agile/Scrum hiring evaluator reviewing a completed scenario-based assessment transcript for a candidate applying for a {role_focus_label} position at {company_name}. Analyze the candidate's answers and call the submit_candidate_scorecard tool exactly once with a structured hiring scorecard. Write every field for a busy hiring manager who did NOT read the transcript — be specific and reference what the candidate actually said, but keep each field short. Be honest and calibrated: do not default to high scores; a vague, generic, or evasive answer should score low. Specifically note in integrity_notes if any answer sounds generic, templated, or inconsistent with the specific scenario details given, rather than a genuine response to this exact question — leave integrity_notes empty if nothing seems notable."""
+
+HIRE_SCORING_TOOL = {
+    "name": "submit_candidate_scorecard",
+    "description": "Submit the structured hiring scorecard: overall score, recommendation, summary, strengths, gaps, per-question notes, and integrity notes.",
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "overall_score": {"type": "integer", "description": "Overall score from 0 to 100."},
+            "recommendation": {"type": "string", "enum": ["Strong Fit", "Fit", "Borderline", "Not a Fit"]},
+            "summary": {"type": "string", "description": "2-3 sentence recruiter-facing summary."},
+            "strengths": {"type": "array", "items": {"type": "string"}, "description": "2-4 specific strengths."},
+            "gaps": {"type": "array", "items": {"type": "string"}, "description": "2-4 specific gaps."},
+            "per_question_notes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": {"type": "string", "description": "Short paraphrase of the question, under 15 words."},
+                        "assessment": {"type": "string", "description": "1 sentence, hiring lens."},
+                    },
+                    "required": ["question", "assessment"],
+                    "additionalProperties": False,
+                },
+                "description": "One entry per question asked.",
+            },
+            "integrity_notes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Notes on any answers that seemed generic, templated, or inconsistent with the specific scenario — empty array if nothing notable.",
+            },
+        },
+        "required": ["overall_score", "recommendation", "summary", "strengths", "gaps", "per_question_notes", "integrity_notes"],
+        "additionalProperties": False,
+    },
+}
 
 def _get_owned_assessment(assessment_id: str, current_user: User, db: Session) -> Assessment:
     assessment = db.query(Assessment).filter(
@@ -1902,6 +1971,7 @@ def list_assessments(current_user: User = Depends(require_employer), db: Session
             "assessment_id": a.assessment_id, "title": a.title, "role_focus": a.role_focus,
             "role_focus_label": ROLE_FOCUS_LABELS.get(a.role_focus, a.role_focus),
             "status": a.status, "created_at": a.created_at.isoformat() if a.created_at else None,
+            "require_id_upload": bool(a.require_id_upload),
             "invited_count": len(invites),
             "completed_count": sum(1 for i in invites if i.status == "completed"),
         })
@@ -1915,7 +1985,7 @@ def create_assessment(body: AssessmentBody, current_user: User = Depends(require
         raise HTTPException(status_code=400, detail="Title is required")
     assessment = Assessment(
         assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
-        title=body.title.strip(), role_focus=body.role_focus,
+        title=body.title.strip(), role_focus=body.role_focus, require_id_upload=body.require_id_upload,
     )
     db.add(assessment)
     db.commit()
@@ -1929,6 +1999,7 @@ def get_assessment(assessment_id: str, current_user: User = Depends(require_empl
         "assessment_id": assessment.assessment_id, "title": assessment.title, "role_focus": assessment.role_focus,
         "role_focus_label": ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus),
         "status": assessment.status, "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
+        "require_id_upload": bool(assessment.require_id_upload),
         "candidates": [{
             "invite_token": i.invite_token, "candidate_name": i.candidate_name, "candidate_email": i.candidate_email,
             "status": i.status, "created_at": i.created_at.isoformat() if i.created_at else None,
@@ -1944,6 +2015,8 @@ def patch_assessment(assessment_id: str, body: AssessmentPatchBody, current_user
         if body.status not in ("active", "archived"):
             raise HTTPException(status_code=400, detail="Invalid status")
         assessment.status = body.status
+    if body.require_id_upload is not None:
+        assessment.require_id_upload = body.require_id_upload
     db.commit()
     return {"success": True}
 
@@ -1990,11 +2063,239 @@ def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
     return {
         "candidate_name": invite.candidate_name,
         "company_name": employer_profile.company_name if employer_profile else "the company",
+        "company_logo_url": employer_profile.logo_url if employer_profile else None,
         "role_focus": assessment.role_focus if assessment else None,
         "role_focus_label": ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus) if assessment else None,
         "status": invite.status,
+        "require_id_upload": bool(assessment.require_id_upload) if assessment else False,
+        "id_photo_uploaded": bool(invite.id_photo_url),
         "expires_at": invite.expires_at.isoformat(),
     }
+
+async def _get_invite_or_404(invite_token: str, db: Session) -> CandidateInvite:
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="This assessment link is invalid.")
+    return invite
+
+@app.post("/api/public/hire/{invite_token}/id-photo")
+async def hire_id_photo_upload(invite_token: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    invite = await _get_invite_or_404(invite_token, db)
+    if invite.status in ("completed", "expired"):
+        raise HTTPException(status_code=410, detail="This assessment has already been completed.")
+    contents = await file.read()
+    _validate_upload(file, contents, ALLOWED_IMAGE_TYPES)
+    try:
+        url = upload_file(contents, folder="agilehire/id_photos", resource_type="image")
+    except Exception as e:
+        print(f"[HIRE ID PHOTO UPLOAD ERROR] {e}")
+        raise HTTPException(status_code=503, detail="Photo upload failed. Please try again.")
+    invite.id_photo_url = url
+    db.commit()
+    return {"success": True}
+
+@app.post("/api/public/hire/{invite_token}/message")
+@limiter.limit("20/minute")
+def hire_message(request: Request, invite_token: str, body: HireMessageBody, db: Session = Depends(get_db)):
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="This assessment link is invalid.")
+    if invite.status in ("completed", "expired") or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="This assessment link has expired or already been completed.")
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="Assessment isn't configured yet. Please try again later.")
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="At least one message is required.")
+
+    assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
+    employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
+    company_name = employer_profile.company_name if employer_profile else "the company"
+    role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus) if assessment else "the role"
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=500,
+            system=_build_hire_system_prompt(company_name, role_label),
+            messages=[{"role": m.role, "content": m.content} for m in body.messages],
+        )
+    except anthropic.APIError as e:
+        print(f"[HIRE MESSAGE ERROR] {e}")
+        raise HTTPException(status_code=502, detail="The assessment is temporarily unavailable. Please try again.")
+
+    if len(body.messages) == 1 and invite.status == "pending":
+        invite.status = "started"
+        invite.started_at = datetime.now(timezone.utc)
+        db.add(HireUsageLog(employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token, event_type="candidate_started"))
+        db.commit()
+
+    reply = next((b.text for b in response.content if b.type == "text"), "")
+    return {"reply": reply}
+
+@app.post("/api/public/hire/{invite_token}/submit")
+@limiter.limit("10/hour")
+def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: Session = Depends(get_db)):
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="This assessment link is invalid.")
+
+    existing = db.query(CandidateResult).filter(CandidateResult.invite_token == invite_token).first()
+    if existing:
+        return {"success": True}
+
+    if invite.status == "expired" or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="This assessment link has expired.")
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="Assessment isn't configured yet. Please try again later.")
+    if len(body.messages) < 4:
+        raise HTTPException(status_code=400, detail="Please answer all questions before submitting.")
+
+    assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
+    employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
+    company_name = employer_profile.company_name if employer_profile else "the company"
+    role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus) if assessment else "the role"
+
+    transcript_text = "\n\n".join(f"{m.role.upper()}: {m.content}" for m in body.messages)
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=1024,
+            thinking={"type": "disabled"},
+            system=_build_hire_scoring_system_prompt(company_name, role_label),
+            tools=[HIRE_SCORING_TOOL],
+            tool_choice={"type": "tool", "name": "submit_candidate_scorecard"},
+            messages=[{"role": "user", "content": transcript_text}],
+        )
+    except anthropic.APIError as e:
+        print(f"[HIRE SUBMIT ERROR] {e}")
+        raise HTTPException(status_code=502, detail="Could not score this assessment. Please try again.")
+
+    tool_block = next((b for b in response.content if b.type == "tool_use"), None)
+    if tool_block is None:
+        raise HTTPException(status_code=502, detail="Could not score this assessment. Please try again.")
+    scored = tool_block.input
+
+    result = CandidateResult(
+        result_id=generate_result_id(db), invite_token=invite_token,
+        transcript_json=json.dumps([{"role": m.role, "content": m.content} for m in body.messages]),
+        overall_score=scored.get("overall_score"), recommendation=scored.get("recommendation"),
+        summary=scored.get("summary"), strengths_json=json.dumps(scored.get("strengths", [])),
+        gaps_json=json.dumps(scored.get("gaps", [])), per_question_notes_json=json.dumps(scored.get("per_question_notes", [])),
+        integrity_notes_json=json.dumps(scored.get("integrity_notes", [])),
+        paste_detected=body.paste_detected, tab_switch_count=body.tab_switch_count, fast_answer_count=body.fast_answer_count,
+    )
+    db.add(result)
+    invite.status = "completed"
+    invite.completed_at = datetime.now(timezone.utc)
+    db.add(HireUsageLog(employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token, event_type="candidate_completed"))
+    db.commit()
+
+    return {"success": True}
+
+@app.get("/api/employer/assessments/{assessment_id}/invites/{invite_token}")
+def get_scorecard(assessment_id: str, invite_token: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    assessment = _get_owned_assessment(assessment_id, current_user, db)
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token, CandidateInvite.assessment_id == assessment_id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    result = db.query(CandidateResult).filter(CandidateResult.invite_token == invite_token).first()
+    if not result:
+        return {"candidate_name": invite.candidate_name, "candidate_email": invite.candidate_email, "status": invite.status, "completed": False}
+    return {
+        "candidate_name": invite.candidate_name, "candidate_email": invite.candidate_email,
+        "id_photo_url": invite.id_photo_url,
+        "role_focus_label": ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus),
+        "overall_score": result.overall_score, "recommendation": result.recommendation,
+        "summary": result.summary, "strengths": json.loads(result.strengths_json or "[]"),
+        "gaps": json.loads(result.gaps_json or "[]"), "per_question_notes": json.loads(result.per_question_notes_json or "[]"),
+        "integrity_notes": json.loads(result.integrity_notes_json or "[]"),
+        "paste_detected": result.paste_detected, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
+        "completed_at": invite.completed_at.isoformat() if invite.completed_at else None,
+        "completed": True,
+    }
+
+def _build_hire_scorecard_pdf(candidate_name: str, company_name: str, role_label: str, result: CandidateResult) -> bytes:
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, topMargin=0.6*inch, bottomMargin=0.6*inch, leftMargin=0.7*inch, rightMargin=0.7*inch)
+    styles = getSampleStyleSheet()
+    accent = colors.HexColor("#2563eb")
+    title_style = ParagraphStyle('TitleX', parent=styles['Title'], textColor=accent, fontSize=20, spaceAfter=2)
+    meta_style = ParagraphStyle('Meta', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#64748b'), spaceAfter=14)
+    h2 = ParagraphStyle('H2', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#1e293b'), spaceBefore=10, spaceAfter=6)
+    body_style = ParagraphStyle('BodyX', parent=styles['Normal'], fontSize=10.5, leading=14)
+    warn_style = ParagraphStyle('WarnX', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor('#b45309'), spaceBefore=10)
+
+    def esc(s, limit=260):
+        return xml_escape((s or "")[:limit])
+
+    strengths = json.loads(result.strengths_json or "[]")
+    gaps = json.loads(result.gaps_json or "[]")
+    notes = json.loads(result.per_question_notes_json or "[]")
+    integrity = json.loads(result.integrity_notes_json or "[]")
+
+    story = [
+        Paragraph("Hiring Assessment Scorecard", title_style),
+        Paragraph(f"{esc(candidate_name, 100)} &nbsp;|&nbsp; {esc(role_label, 60)} &nbsp;|&nbsp; {esc(company_name, 80)} &nbsp;|&nbsp; {datetime.now().strftime('%B %d, %Y')}", meta_style),
+        Paragraph(f"Overall Score: {result.overall_score}/100 — {esc(result.recommendation, 40)}", h2),
+        Paragraph(esc(result.summary, 400), body_style),
+        Paragraph("Strengths", h2),
+        ListFlowable([ListItem(Paragraph(esc(s), body_style)) for s in strengths[:4]], bulletType='bullet'),
+        Paragraph("Gaps", h2),
+        ListFlowable([ListItem(Paragraph(esc(g), body_style)) for g in gaps[:4]], bulletType='bullet'),
+        Paragraph("Per-Question Notes", h2),
+        ListFlowable([ListItem(Paragraph(f"<b>{esc(n.get('question',''), 100)}</b> — {esc(n.get('assessment',''), 200)}", body_style)) for n in notes[:6]], bulletType='bullet'),
+    ]
+    if integrity:
+        story.append(Paragraph("Integrity Notes", h2))
+        story.append(ListFlowable([ListItem(Paragraph(esc(n), body_style)) for n in integrity[:4]], bulletType='bullet'))
+    flags = []
+    if result.paste_detected:
+        flags.append("Pasted text detected in at least one answer")
+    if result.tab_switch_count:
+        flags.append(f"{result.tab_switch_count} tab/window switch(es) during the assessment")
+    if result.fast_answer_count:
+        flags.append(f"{result.fast_answer_count} unusually fast answer(s)")
+    if flags:
+        story.append(Paragraph("⚠ " + "; ".join(flags), warn_style))
+    doc.build(story)
+    return buf.getvalue()
+
+@app.get("/api/employer/assessments/{assessment_id}/invites/{invite_token}/pdf")
+def get_scorecard_pdf(assessment_id: str, invite_token: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    assessment = _get_owned_assessment(assessment_id, current_user, db)
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token, CandidateInvite.assessment_id == assessment_id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    result = db.query(CandidateResult).filter(CandidateResult.invite_token == invite_token).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="This candidate hasn't completed the assessment yet")
+    employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == current_user.user_id).first()
+    company_name = employer_profile.company_name if employer_profile else "Your Company"
+    role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus)
+    pdf_bytes = _build_hire_scorecard_pdf(invite.candidate_name, company_name, role_label, result)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes), media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=scorecard-{invite.candidate_name.replace(' ', '-')}.pdf"},
+    )
+
+@app.post("/api/employer/profile/logo")
+async def upload_employer_logo(file: UploadFile = File(...), current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == current_user.user_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Employer profile not found")
+    contents = await file.read()
+    _validate_upload(file, contents, ALLOWED_IMAGE_TYPES)
+    try:
+        url = upload_file(contents, folder="agilehire/logos", resource_type="image")
+    except Exception as e:
+        print(f"[EMPLOYER LOGO UPLOAD ERROR] {e}")
+        raise HTTPException(status_code=503, detail="Logo upload failed. Please try again.")
+    profile.logo_url = url
+    db.commit()
+    return {"success": True, "logo_url": url}
 
 @app.post("/api/admin/users/{user_id}/hire-credits")
 def admin_set_hire_credits(user_id: str, credits: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
