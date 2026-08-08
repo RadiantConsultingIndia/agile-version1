@@ -290,6 +290,30 @@ def assessment_invite_email(candidate_name: str, company_name: str, role_focus_l
     """
 
 
+def candidate_abandoned_email(candidate_name: str, role_focus_label: str, dashboard_link: str) -> str:
+    return f"""
+    <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
+      <div style="background:linear-gradient(135deg,#0F2645,#1a3a6b);padding:32px 36px;">
+        <div style="font-size:1.2rem;font-weight:800;color:white;letter-spacing:-0.3px;">Agile<span style="color:#60A5FA;">Hire</span></div>
+      </div>
+      <div style="padding:36px;">
+        <div style="display:inline-block;padding:4px 12px;background:#FEF2F2;color:#B91C1C;font-size:0.75rem;font-weight:700;border-radius:20px;margin-bottom:16px;">
+          ⚠ ASSESSMENT NOT COMPLETED
+        </div>
+        <h2 style="font-size:1.3rem;font-weight:700;color:#0F2645;margin-bottom:8px;">{candidate_name} exited their assessment</h2>
+        <p style="font-size:0.9rem;color:#64748B;margin-bottom:24px;line-height:1.6;">
+          {candidate_name} started the {role_focus_label} assessment you sent, then chose to exit before finishing. Their invite link is now closed — they can't reopen or resume it.
+        </p>
+        <a href="{dashboard_link}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#2563EB,#0EA5E9);color:white;font-weight:700;font-size:0.9rem;border-radius:10px;text-decoration:none;">
+          View Assessment →
+        </a>
+        <hr style="border:none;border-top:1px solid #E2E8F4;margin:24px 0;"/>
+        <p style="font-size:0.75rem;color:#CBD5E1;">© 2026 AgileHire, a product of Radiant Consulting.</p>
+      </div>
+    </div>
+    """
+
+
 def otp_verification_email(full_name: str, otp_code: str) -> str:
     return f"""
     <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">

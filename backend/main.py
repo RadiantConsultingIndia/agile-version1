@@ -61,7 +61,7 @@ from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
     enrollment_request_admin_email, enrollment_approved_email, enrollment_rejected_email,
-    certificate_earned_email, assessment_invite_email,
+    certificate_earned_email, assessment_invite_email, candidate_abandoned_email,
 )
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -2102,8 +2102,8 @@ def delete_invite(assessment_id: str, invite_token: str, current_user: User = De
     invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token, CandidateInvite.assessment_id == assessment_id).first()
     if not invite:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    if invite.status != "pending":
-        raise HTTPException(status_code=400, detail="Only pending (not yet started) invites can be deleted.")
+    if invite.status == "completed":
+        raise HTTPException(status_code=400, detail="Completed invites (with a scorecard) can't be deleted.")
     db.query(HireUsageLog).filter(HireUsageLog.invite_token == invite_token).delete()
     db.delete(invite)
     access = db.query(EmployerAssessmentCredits).filter(EmployerAssessmentCredits.user_id == current_user.user_id).first()
@@ -2117,7 +2117,7 @@ def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
     invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
     if not invite:
         raise HTTPException(status_code=404, detail="This assessment link is invalid.")
-    if invite.status in ("completed", "expired") or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if invite.status in ("completed", "expired", "abandoned") or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="This assessment link has expired or already been completed.")
     assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
     employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
@@ -2133,6 +2133,28 @@ def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
         "expires_at": invite.expires_at.isoformat(),
     }
 
+@app.post("/api/public/hire/{invite_token}/quit")
+def hire_quit(invite_token: str, db: Session = Depends(get_db)):
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="This assessment link is invalid.")
+    if invite.status in ("completed", "expired", "abandoned"):
+        return {"success": True}
+    invite.status = "abandoned"
+    assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
+    db.add(HireUsageLog(employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token, event_type="candidate_abandoned"))
+    db.commit()
+
+    if assessment:
+        employer_user = db.query(User).filter(User.user_id == assessment.employer_user_id).first()
+        if employer_user and employer_user.email:
+            role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus)
+            dashboard_link = f"{HIRE_FRONTEND_URL}/employer/assessments/{assessment.assessment_id}"
+            html = candidate_abandoned_email(invite.candidate_name, role_label, dashboard_link)
+            threading.Thread(target=send_email, args=(employer_user.email, f"{invite.candidate_name} did not complete the {role_label} assessment", html)).start()
+
+    return {"success": True}
+
 async def _get_invite_or_404(invite_token: str, db: Session) -> CandidateInvite:
     invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
     if not invite:
@@ -2142,7 +2164,7 @@ async def _get_invite_or_404(invite_token: str, db: Session) -> CandidateInvite:
 @app.post("/api/public/hire/{invite_token}/id-photo")
 async def hire_id_photo_upload(invite_token: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
     invite = await _get_invite_or_404(invite_token, db)
-    if invite.status in ("completed", "expired"):
+    if invite.status in ("completed", "expired", "abandoned"):
         raise HTTPException(status_code=410, detail="This assessment has already been completed.")
     contents = await file.read()
     _validate_upload(file, contents, ALLOWED_IMAGE_TYPES)
@@ -2161,7 +2183,7 @@ def hire_message(request: Request, invite_token: str, body: HireMessageBody, db:
     invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token).first()
     if not invite:
         raise HTTPException(status_code=404, detail="This assessment link is invalid.")
-    if invite.status in ("completed", "expired") or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if invite.status in ("completed", "expired", "abandoned") or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="This assessment link has expired or already been completed.")
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="Assessment isn't configured yet. Please try again later.")
@@ -2205,7 +2227,7 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
     if existing:
         return {"success": True}
 
-    if invite.status == "expired" or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if invite.status in ("expired", "abandoned") or invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="This assessment link has expired.")
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="Assessment isn't configured yet. Please try again later.")
