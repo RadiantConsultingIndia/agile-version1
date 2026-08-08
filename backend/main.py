@@ -80,6 +80,8 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)'))
     _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS require_id_upload BOOLEAN DEFAULT FALSE'))
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS id_photo_url VARCHAR(500)'))
+    _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_count INTEGER DEFAULT 0'))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS jd_text TEXT'))
     _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -1880,11 +1882,14 @@ class AssessmentBody(BaseModel):
     title: str
     role_focus: str
     require_id_upload: bool = False
+    jd_text: Optional[str] = None
 
 class AssessmentPatchBody(BaseModel):
     title: Optional[str] = None
     status: Optional[str] = None
     require_id_upload: Optional[bool] = None
+    jd_text: Optional[str] = None
+    clear_jd: bool = False
 
 class CandidateInviteBody(BaseModel):
     candidate_name: str
@@ -1895,21 +1900,33 @@ class HireMessageBody(BaseModel):
 
 class HireSubmitBody(BaseModel):
     messages: list[AIInterviewMessage]
-    paste_detected: bool = False
+    paste_count: int = 0
     tab_switch_count: int = 0
     fast_answer_count: int = 0
 
-def _build_hire_system_prompt(company_name: str, role_focus_label: str) -> str:
+def _build_hire_system_prompt(company_name: str, role_focus_label: str, jd_text: str = None) -> str:
+    if jd_text:
+        scenario_source = f"""The employer has provided the actual job description for this role, given below. Base all 5 questions on the specific responsibilities, requirements, and context in this JD rather than generic textbook scenarios — invent realistic on-the-job situations that a candidate would genuinely face in *this* role as described.
+
+--- JOB DESCRIPTION ---
+{jd_text}
+--- END JOB DESCRIPTION ---"""
+    else:
+        scenario_source = f"Ask about realistic on-the-job situations for a {role_focus_label} (e.g. conflicting stakeholder priorities, a team missing sprint commitments, scope creep, a blocked team member, prioritization trade-offs). Invent fresh, specific scenario details each time (team names, numbers, concrete situations) rather than generic textbook phrasing, so each assessment feels distinct."
+
     return f"""You are conducting a scenario-based hiring assessment on behalf of {company_name} for a {role_focus_label} position. This is a real hiring evaluation, not a practice session — the candidate's answers will be scored and shared with the hiring team, so stay professional, neutral, and encouraging, but do not coach, hint, or give feedback on answer quality during the conversation.
 
-Ask exactly 5 scenario-based questions, one at a time, covering realistic on-the-job situations for a {role_focus_label} (e.g. conflicting stakeholder priorities, a team missing sprint commitments, scope creep, a blocked team member, prioritization trade-offs). Invent fresh, specific scenario details each time (team names, numbers, concrete situations) rather than generic textbook phrasing, so each assessment feels distinct. After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next scenario.") — never a rating, score, or evaluative comment — then ask the next question.
+Ask exactly 5 scenario-based questions, one at a time. {scenario_source} After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next scenario.") — never a rating, score, or evaluative comment — then ask the next question.
 
 After the candidate answers the 5th and final question, thank them warmly, let them know {company_name} will review responses and follow up if there's a match, and do NOT reveal any score. Immediately after that, on its own with nothing else before or after it, append the exact literal text [[ASSESSMENT_COMPLETE]] — a hidden marker for the app only; never mention it.
 
 Keep every response conversational and concise."""
 
-def _build_hire_scoring_system_prompt(company_name: str, role_focus_label: str) -> str:
-    return f"""You are an expert Agile/Scrum hiring evaluator reviewing a completed scenario-based assessment transcript for a candidate applying for a {role_focus_label} position at {company_name}. Analyze the candidate's answers and call the submit_candidate_scorecard tool exactly once with a structured hiring scorecard. Write every field for a busy hiring manager who did NOT read the transcript — be specific and reference what the candidate actually said, but keep each field short. Be honest and calibrated: do not default to high scores; a vague, generic, or evasive answer should score low. Specifically note in integrity_notes if any answer sounds generic, templated, or inconsistent with the specific scenario details given, rather than a genuine response to this exact question — leave integrity_notes empty if nothing seems notable."""
+def _build_hire_scoring_system_prompt(company_name: str, role_focus_label: str, jd_text: str = None) -> str:
+    jd_block = f"\n\nThe candidate was evaluated against this actual job description — weigh your assessment against its specific requirements, not just the general {role_focus_label} title:\n--- JOB DESCRIPTION ---\n{jd_text}\n--- END JOB DESCRIPTION ---" if jd_text else ""
+    return f"""You are an expert Agile/Scrum hiring evaluator reviewing a completed scenario-based assessment transcript for a candidate applying for a {role_focus_label} position at {company_name}. Analyze the candidate's answers and call the submit_candidate_scorecard tool exactly once with a structured hiring scorecard. Write every field for a busy hiring manager who did NOT read the transcript — be specific and reference what the candidate actually said, but keep each field short. Be honest and calibrated: do not default to high scores; a vague, generic, or evasive answer should score low. Specifically note in integrity_notes if any answer sounds generic, templated, or inconsistent with the specific scenario details given, rather than a genuine response to this exact question — leave integrity_notes empty if nothing seems notable.{jd_block}
+
+The transcript is followed by an INTEGRITY SIGNALS block with automatically captured data (paste count, tab/window switches, unusually fast answers) — this is ground truth from the browser, not an inference from the writing style. Treat it as at least as reliable as your own read of the text, and follow any explicit scoring instruction included in that block exactly (it may require a specific score cap or recommendation). Do not let polished or well-structured writing override a strong integrity signal. A handful of tab switches alone is not disqualifying, but combine it with a high paste count and say so."""
 
 HIRE_SCORING_TOOL = {
     "name": "submit_candidate_scorecard",
@@ -1934,7 +1951,9 @@ HIRE_SCORING_TOOL = {
                     "required": ["question", "assessment"],
                     "additionalProperties": False,
                 },
-                "description": "One entry per question asked.",
+                "minItems": 5,
+                "maxItems": 5,
+                "description": "Exactly one entry per question asked — the assessment always asks exactly 5 questions, so this array must have exactly 5 items.",
             },
             "integrity_notes": {
                 "type": "array",
@@ -1972,6 +1991,7 @@ def list_assessments(current_user: User = Depends(require_employer), db: Session
             "role_focus_label": ROLE_FOCUS_LABELS.get(a.role_focus, a.role_focus),
             "status": a.status, "created_at": a.created_at.isoformat() if a.created_at else None,
             "require_id_upload": bool(a.require_id_upload),
+            "has_jd": bool(a.jd_text),
             "invited_count": len(invites),
             "completed_count": sum(1 for i in invites if i.status == "completed"),
         })
@@ -1986,10 +2006,24 @@ def create_assessment(body: AssessmentBody, current_user: User = Depends(require
     assessment = Assessment(
         assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
         title=body.title.strip(), role_focus=body.role_focus, require_id_upload=body.require_id_upload,
+        jd_text=(body.jd_text or "").strip()[:MAX_JD_TEXT_CHARS] or None,
     )
     db.add(assessment)
     db.commit()
     return {"success": True, "assessment_id": assessment.assessment_id}
+
+@app.post("/api/employer/upload-jd")
+async def employer_upload_jd(file: UploadFile = File(...), current_user: User = Depends(require_employer)):
+    contents = await file.read()
+    _validate_upload(file, contents, ALLOWED_JD_TYPES)
+    try:
+        jd_text = _extract_text_from_upload(file.content_type, contents)
+    except Exception as e:
+        print(f"[EMPLOYER JD UPLOAD ERROR] {e}")
+        raise HTTPException(status_code=422, detail="Couldn't read text from that file. Please try a different PDF or DOCX file.")
+    if len(jd_text) < 20:
+        raise HTTPException(status_code=422, detail="Couldn't read text from that file. Please try a different PDF or DOCX file.")
+    return {"jd_text": jd_text}
 
 @app.get("/api/employer/assessments/{assessment_id}")
 def get_assessment(assessment_id: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
@@ -2000,6 +2034,7 @@ def get_assessment(assessment_id: str, current_user: User = Depends(require_empl
         "role_focus_label": ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus),
         "status": assessment.status, "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
         "require_id_upload": bool(assessment.require_id_upload),
+        "jd_text": assessment.jd_text,
         "candidates": [{
             "invite_token": i.invite_token, "candidate_name": i.candidate_name, "candidate_email": i.candidate_email,
             "status": i.status, "created_at": i.created_at.isoformat() if i.created_at else None,
@@ -2017,6 +2052,10 @@ def patch_assessment(assessment_id: str, body: AssessmentPatchBody, current_user
         assessment.status = body.status
     if body.require_id_upload is not None:
         assessment.require_id_upload = body.require_id_upload
+    if body.clear_jd:
+        assessment.jd_text = None
+    elif body.jd_text is not None:
+        assessment.jd_text = body.jd_text.strip()[:MAX_JD_TEXT_CHARS] or None
     db.commit()
     return {"success": True}
 
@@ -2117,7 +2156,7 @@ def hire_message(request: Request, invite_token: str, body: HireMessageBody, db:
         response = client.messages.create(
             model="claude-sonnet-5",
             max_tokens=500,
-            system=_build_hire_system_prompt(company_name, role_label),
+            system=_build_hire_system_prompt(company_name, role_label, assessment.jd_text if assessment else None),
             messages=[{"role": m.role, "content": m.content} for m in body.messages],
         )
     except anthropic.APIError as e:
@@ -2157,6 +2196,18 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
     role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus) if assessment else "the role"
 
     transcript_text = "\n\n".join(f"{m.role.upper()}: {m.content}" for m in body.messages)
+    integrity_block = (
+        f"\n\n[INTEGRITY SIGNALS — captured automatically by the browser during the assessment, not derived from the writing itself]\n"
+        f"- The candidate attempted to paste text {body.paste_count} time(s) (pasting is disabled in the answer box, so these attempts were blocked automatically and never reached the answer text).\n"
+        f"- Candidate switched away from the assessment tab/window or exited fullscreen {body.tab_switch_count} time(s).\n"
+        f"- {body.fast_answer_count} answer(s) were submitted unusually fast for their length.\n"
+    )
+    if body.paste_count > 0:
+        integrity_block += (
+            f"\nThis assessment has ZERO TOLERANCE for pasting — any attempt at all, even one, is an automatic reject regardless of how strong "
+            f"the typed content reads. Since paste_count is {body.paste_count} (greater than 0), overall_score MUST be 20 or lower and "
+            f"recommendation MUST be \"Not a Fit\". State this plainly as the primary reason in both summary and integrity_notes.\n"
+        )
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     try:
@@ -2164,10 +2215,10 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
             model="claude-sonnet-5",
             max_tokens=1024,
             thinking={"type": "disabled"},
-            system=_build_hire_scoring_system_prompt(company_name, role_label),
+            system=_build_hire_scoring_system_prompt(company_name, role_label, assessment.jd_text if assessment else None),
             tools=[HIRE_SCORING_TOOL],
             tool_choice={"type": "tool", "name": "submit_candidate_scorecard"},
-            messages=[{"role": "user", "content": transcript_text}],
+            messages=[{"role": "user", "content": transcript_text + integrity_block}],
         )
     except anthropic.APIError as e:
         print(f"[HIRE SUBMIT ERROR] {e}")
@@ -2185,7 +2236,7 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
         summary=scored.get("summary"), strengths_json=json.dumps(scored.get("strengths", [])),
         gaps_json=json.dumps(scored.get("gaps", [])), per_question_notes_json=json.dumps(scored.get("per_question_notes", [])),
         integrity_notes_json=json.dumps(scored.get("integrity_notes", [])),
-        paste_detected=body.paste_detected, tab_switch_count=body.tab_switch_count, fast_answer_count=body.fast_answer_count,
+        paste_count=body.paste_count, tab_switch_count=body.tab_switch_count, fast_answer_count=body.fast_answer_count,
     )
     db.add(result)
     invite.status = "completed"
@@ -2212,7 +2263,7 @@ def get_scorecard(assessment_id: str, invite_token: str, current_user: User = De
         "summary": result.summary, "strengths": json.loads(result.strengths_json or "[]"),
         "gaps": json.loads(result.gaps_json or "[]"), "per_question_notes": json.loads(result.per_question_notes_json or "[]"),
         "integrity_notes": json.loads(result.integrity_notes_json or "[]"),
-        "paste_detected": result.paste_detected, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
+        "paste_count": result.paste_count, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
         "completed_at": invite.completed_at.isoformat() if invite.completed_at else None,
         "completed": True,
     }
@@ -2252,8 +2303,8 @@ def _build_hire_scorecard_pdf(candidate_name: str, company_name: str, role_label
         story.append(Paragraph("Integrity Notes", h2))
         story.append(ListFlowable([ListItem(Paragraph(esc(n), body_style)) for n in integrity[:4]], bulletType='bullet'))
     flags = []
-    if result.paste_detected:
-        flags.append("Pasted text detected in at least one answer")
+    if result.paste_count:
+        flags.append(f"Candidate attempted to paste text {result.paste_count} time(s) — blocked automatically (zero-tolerance policy)")
     if result.tab_switch_count:
         flags.append(f"{result.tab_switch_count} tab/window switch(es) during the assessment")
     if result.fast_answer_count:
