@@ -14,3 +14,4 @@ class CandidateInvite(Base):
     expires_at = Column(DateTime, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+    id_photo_url = Column(String(500), nullable=True)

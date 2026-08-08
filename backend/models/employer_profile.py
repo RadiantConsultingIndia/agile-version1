@@ -10,4 +10,5 @@ class EmployerProfile(Base):
     company_name = Column(String(150), nullable=False)
     industry = Column(String(100), nullable=True)
     company_size = Column(String(20), nullable=True)
+    logo_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
