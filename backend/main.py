@@ -1918,6 +1918,12 @@ def _build_hire_system_prompt(company_name: str, role_focus_label: str, jd_text:
 
 Ask exactly 5 scenario-based questions, one at a time. {scenario_source} After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next scenario.") — never a rating, score, or evaluative comment — then ask the next question.
 
+Format every question consistently and cleanly for readability (this is rendered in a chat bubble, markdown **bold** is supported, plain text otherwise — no other markdown):
+- Start with a bolded label on its own line, e.g. **Scenario 1:**
+- Leave a blank line, then describe the situation in 2-4 concise sentences.
+- Leave another blank line, then ask the actual question as its own short sentence.
+Keep the opening pleasantry (e.g. "Let's begin with the first scenario:") on its own line before the label, not crammed into the same paragraph as the scenario text.
+
 After the candidate answers the 5th and final question, thank them warmly, let them know {company_name} will review responses and follow up if there's a match, and do NOT reveal any score. Immediately after that, on its own with nothing else before or after it, append the exact literal text [[ASSESSMENT_COMPLETE]] — a hidden marker for the app only; never mention it.
 
 Keep every response conversational and concise."""
@@ -2089,6 +2095,22 @@ def invite_candidate(assessment_id: str, body: CandidateInviteBody, current_user
     threading.Thread(target=send_email, args=(invite.candidate_email, f"You're invited: {role_label} Assessment", html)).start()
 
     return {"success": True, "invite_token": invite.invite_token, "credits_remaining": access.credits_remaining}
+
+@app.delete("/api/employer/assessments/{assessment_id}/invites/{invite_token}")
+def delete_invite(assessment_id: str, invite_token: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    _get_owned_assessment(assessment_id, current_user, db)
+    invite = db.query(CandidateInvite).filter(CandidateInvite.invite_token == invite_token, CandidateInvite.assessment_id == assessment_id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    if invite.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending (not yet started) invites can be deleted.")
+    db.query(HireUsageLog).filter(HireUsageLog.invite_token == invite_token).delete()
+    db.delete(invite)
+    access = db.query(EmployerAssessmentCredits).filter(EmployerAssessmentCredits.user_id == current_user.user_id).first()
+    if access:
+        access.credits_remaining += 1
+    db.commit()
+    return {"success": True}
 
 @app.get("/api/public/hire/{invite_token}")
 def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
