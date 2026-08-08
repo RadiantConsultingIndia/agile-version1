@@ -7,6 +7,7 @@ load_dotenv()
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "AgileMentor <onboarding@resend.dev>")
+print(f"[EMAIL DEBUG] Loaded RESEND_API_KEY prefix: {(RESEND_API_KEY or '')[:12]}... | RESEND_FROM_EMAIL: {RESEND_FROM_EMAIL}")
 
 
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
