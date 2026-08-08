@@ -1,5 +1,6 @@
 import json
 import urllib.request
+import urllib.error
 from dotenv import load_dotenv
 import os
 
@@ -7,7 +8,6 @@ load_dotenv()
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "AgileMentor <onboarding@resend.dev>")
-print(f"[EMAIL DEBUG] Loaded RESEND_API_KEY prefix: {(RESEND_API_KEY or '')[:12]}... | RESEND_FROM_EMAIL: {RESEND_FROM_EMAIL}")
 
 
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
@@ -25,11 +25,16 @@ def send_email(to_email: str, subject: str, html_body: str) -> bool:
             headers={
                 "Authorization": f"Bearer {RESEND_API_KEY}",
                 "Content-Type": "application/json",
+                "User-Agent": "AgileMentor-Backend/1.0",
             },
             method="POST",
         )
         with urllib.request.urlopen(req) as resp:
             return resp.status == 200
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        print(f"[EMAIL ERROR] Failed to send to {to_email}: HTTP {e.code} — {body}")
+        return False
     except Exception as e:
         print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}")
         return False
