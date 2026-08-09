@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from database import Base
 
@@ -15,7 +15,7 @@ class CandidateResult(Base):
     gaps_json = Column(Text)
     per_question_notes_json = Column(Text)
     integrity_notes_json = Column(Text)
-    paste_detected = Column(Boolean, default=False)
+    paste_count = Column(Integer, default=0)
     tab_switch_count = Column(Integer, default=0)
     fast_answer_count = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
