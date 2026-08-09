@@ -82,6 +82,7 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS id_photo_url VARCHAR(500)'))
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_count INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS jd_text TEXT'))
+    _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS transcript_json TEXT'))
     _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -1957,9 +1958,8 @@ HIRE_SCORING_TOOL = {
                     "required": ["question", "assessment"],
                     "additionalProperties": False,
                 },
-                "minItems": 5,
-                "maxItems": 5,
-                "description": "Exactly one entry per question asked — the assessment always asks exactly 5 questions, so this array must have exactly 5 items.",
+                "minItems": 1,
+                "description": "One entry per question actually asked in the transcript (usually 5, but match however many scenario questions actually appear) — never leave this empty.",
             },
             "integrity_notes": {
                 "type": "array",
@@ -2131,6 +2131,7 @@ def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
         "require_id_upload": bool(assessment.require_id_upload) if assessment else False,
         "id_photo_uploaded": bool(invite.id_photo_url),
         "expires_at": invite.expires_at.isoformat(),
+        "transcript": json.loads(invite.transcript_json) if invite.transcript_json else [],
     }
 
 @app.post("/api/public/hire/{invite_token}/quit")
@@ -2189,6 +2190,8 @@ def hire_message(request: Request, invite_token: str, body: HireMessageBody, db:
         raise HTTPException(status_code=503, detail="Assessment isn't configured yet. Please try again later.")
     if not body.messages:
         raise HTTPException(status_code=400, detail="At least one message is required.")
+    if invite.status == "started" and len(body.messages) <= 1:
+        raise HTTPException(status_code=409, detail="This assessment is already in progress. Please refresh the page to continue where you left off.")
 
     assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
     employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
@@ -2211,9 +2214,11 @@ def hire_message(request: Request, invite_token: str, body: HireMessageBody, db:
         invite.status = "started"
         invite.started_at = datetime.now(timezone.utc)
         db.add(HireUsageLog(employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token, event_type="candidate_started"))
-        db.commit()
 
     reply = next((b.text for b in response.content if b.type == "text"), "")
+    updated_transcript = [{"role": m.role, "content": m.content} for m in body.messages] + [{"role": "assistant", "content": reply}]
+    invite.transcript_json = json.dumps(updated_transcript)
+    db.commit()
     return {"reply": reply}
 
 @app.post("/api/public/hire/{invite_token}/submit")
