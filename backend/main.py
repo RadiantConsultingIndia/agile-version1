@@ -57,6 +57,7 @@ from models.candidate_invite import CandidateInvite
 from models.employer_credits import EmployerAssessmentCredits
 from models.hire_usage_log import HireUsageLog
 from models.candidate_result import CandidateResult
+from models.employer_jd import EmployerJD
 from email_service import (
     send_email, forgot_password_email, session_created_email,
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
@@ -182,6 +183,19 @@ def generate_assessment_id(db) -> str:
 
 def generate_result_id(db) -> str:
     return _unique_id(db, CandidateResult, CandidateResult.result_id, "ATP", 4)
+
+def generate_jd_id(db) -> str:
+    return _unique_id(db, EmployerJD, EmployerJD.jd_id, "JD", 4)
+
+def _save_employer_jd(db, employer_user_id: str, label: str, jd_text: str):
+    """Save a JD to the employer's reusable library, skipping if an identical one already exists."""
+    jd_text = (jd_text or "").strip()
+    if not jd_text:
+        return
+    existing = db.query(EmployerJD).filter(EmployerJD.employer_user_id == employer_user_id, EmployerJD.jd_text == jd_text).first()
+    if existing:
+        return
+    db.add(EmployerJD(jd_id=generate_jd_id(db), employer_user_id=employer_user_id, label=(label or "Untitled JD").strip()[:150], jd_text=jd_text))
 
 def generate_program_id(db) -> str:
     return _unique_id(db, Program, Program.program_id, "PRG", 4)
@@ -2038,14 +2052,22 @@ def create_assessment(body: AssessmentBody, current_user: User = Depends(require
         raise HTTPException(status_code=400, detail="Invalid role_focus")
     if not body.title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
+    jd_text = (body.jd_text or "").strip()[:MAX_JD_TEXT_CHARS] or None
     assessment = Assessment(
         assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
         title=body.title.strip(), role_focus=body.role_focus, require_id_upload=body.require_id_upload,
-        jd_text=(body.jd_text or "").strip()[:MAX_JD_TEXT_CHARS] or None,
+        jd_text=jd_text,
     )
     db.add(assessment)
+    if jd_text:
+        _save_employer_jd(db, current_user.user_id, body.title.strip(), jd_text)
     db.commit()
     return {"success": True, "assessment_id": assessment.assessment_id}
+
+@app.get("/api/employer/jds")
+def list_employer_jds(current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    jds = db.query(EmployerJD).filter(EmployerJD.employer_user_id == current_user.user_id).order_by(EmployerJD.created_at.desc()).all()
+    return [{"jd_id": j.jd_id, "label": j.label, "jd_text": j.jd_text, "created_at": j.created_at.isoformat() if j.created_at else None} for j in jds]
 
 @app.post("/api/employer/upload-jd")
 async def employer_upload_jd(file: UploadFile = File(...), current_user: User = Depends(require_employer)):
@@ -2091,6 +2113,8 @@ def patch_assessment(assessment_id: str, body: AssessmentPatchBody, current_user
         assessment.jd_text = None
     elif body.jd_text is not None:
         assessment.jd_text = body.jd_text.strip()[:MAX_JD_TEXT_CHARS] or None
+        if assessment.jd_text:
+            _save_employer_jd(db, current_user.user_id, assessment.title, assessment.jd_text)
     db.commit()
     return {"success": True}
 
