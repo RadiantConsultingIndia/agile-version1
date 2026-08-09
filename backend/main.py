@@ -1905,19 +1905,46 @@ class HireSubmitBody(BaseModel):
     tab_switch_count: int = 0
     fast_answer_count: int = 0
 
+HIRE_ROLE_ANCHORS = {
+    "Scrum Master": "A Scrum Master facilitates ceremonies (standups, sprint planning, retros), removes impediments blocking the team, coaches Agile practices, protects the team from scope creep and outside interruptions, and tracks sprint/team health. A Scrum Master does NOT own the product backlog or make business prioritization calls (that's the Product Owner), and does NOT own project-level budget/timeline reporting to executives (that's the Project Manager).",
+    "Project Manager": "A Project Manager owns overall project timeline, budget, and scope across teams, manages resourcing and cross-functional dependencies, reports status and risk to leadership/clients, and handles vendor or contract issues. A Project Manager does NOT run Scrum ceremonies as a facilitator (that's the Scrum Master) and does NOT write user stories or acceptance criteria (that's the Product Owner/Business Analyst).",
+    "Product Owner": "A Product Owner owns and prioritizes the product backlog, defines acceptance criteria, decides what ships and when, and represents the customer/business voice to the delivery team. A Product Owner does NOT run retros/standups as a facilitator (that's the Scrum Master) and does NOT own project-level budget or executive status reporting (that's the Project Manager).",
+    "Business Analyst": "A Business Analyst elicits and documents requirements from stakeholders, performs gap and process analysis, writes/refines user stories and acceptance criteria, reconciles conflicting stakeholder requirements, validates delivered features against business needs (UAT), and bridges business and technical teams. A Business Analyst does NOT run Scrum ceremonies as a facilitator (that's the Scrum Master) and does NOT own the product roadmap or overall project budget (that's the Product Owner/Project Manager).",
+}
+
+HIRE_CHALLENGE_CATEGORIES = """1. Stakeholder conflict & negotiation — competing demands from people with real authority over the work
+2. Prioritization & trade-off decisions under real time/resource constraints
+3. Risk identification & escalation judgment — deciding what to escalate versus resolve independently
+4. Ambiguous or incomplete information — making a defensible call without all the facts
+5. Team performance & difficult people conversations — underperformance, morale, accountability
+6. Process/methodology judgment — adapting standard practice to a messy, nonstandard real situation
+7. Cross-team or cross-functional dependency coordination
+8. Client/customer-facing pressure or expectation management"""
+
 def _build_hire_system_prompt(company_name: str, role_focus_label: str, jd_text: str = None) -> str:
+    role_anchor = HIRE_ROLE_ANCHORS.get(role_focus_label, "")
+    role_anchor_block = f"\n\nWhat this role actually does (stay grounded in this — do not write a scenario that's really a different Agile role's job):\n{role_anchor}" if role_anchor else ""
     if jd_text:
-        scenario_source = f"""The employer has provided the actual job description for this role, given below. Base all 5 questions on the specific responsibilities, requirements, and context in this JD rather than generic textbook scenarios — invent realistic on-the-job situations that a candidate would genuinely face in *this* role as described.
+        scenario_source = f"""The employer has provided the actual job description for this role, given below. Ground each scenario's specific details (team, product, stakeholders) in this JD's context rather than generic textbook settings — invent realistic on-the-job situations that a candidate would genuinely face in *this* role as described.
 
 --- JOB DESCRIPTION ---
 {jd_text}
---- END JOB DESCRIPTION ---"""
+--- END JOB DESCRIPTION ---
+
+Even though the scenarios are grounded in this JD, still draw the 5 questions from 5 DIFFERENT categories in this list — do not let the JD pull every question toward the same theme:
+{HIRE_CHALLENGE_CATEGORIES}"""
     else:
-        scenario_source = f"Ask about realistic on-the-job situations for a {role_focus_label} (e.g. conflicting stakeholder priorities, a team missing sprint commitments, scope creep, a blocked team member, prioritization trade-offs). Invent fresh, specific scenario details each time (team names, numbers, concrete situations) rather than generic textbook phrasing, so each assessment feels distinct."
+        scenario_source = f"""Draw the 5 questions from 5 DIFFERENT categories below — pick exactly one question per category, never two questions from the same category, so the assessment covers real breadth for a {role_focus_label} rather than repeating one theme:
+{HIRE_CHALLENGE_CATEGORIES}
+Invent fresh, specific scenario details each time (team names, numbers, concrete situations) rather than generic textbook phrasing, so each assessment feels distinct."""
 
-    return f"""You are conducting a scenario-based hiring assessment on behalf of {company_name} for a {role_focus_label} position. This is a real hiring evaluation, not a practice session — the candidate's answers will be scored and shared with the hiring team, so stay professional, neutral, and encouraging, but do not coach, hint, or give feedback on answer quality during the conversation.
+    return f"""You are conducting a scenario-based hiring assessment on behalf of {company_name} for a {role_focus_label} position. This is a real hiring evaluation, not a practice session — the candidate's answers will be scored and shared with the hiring team, so stay professional, neutral, and encouraging, but do not coach, hint, or give feedback on answer quality during the conversation.{role_anchor_block}
 
-Ask exactly 5 scenario-based questions, one at a time. {scenario_source} After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next scenario.") — never a rating, score, or evaluative comment — then ask the next question.
+Ask exactly 5 scenario-based questions, one at a time. {scenario_source}
+
+Make every scenario genuinely challenging for an experienced professional — include realistic ambiguity, competing constraints, incomplete information, or conflicting incentives. Avoid straightforward textbook "what would you do" setups with one obvious right answer; a strong scenario should have real tension and no clean, universally-agreed-upon resolution.
+
+After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next scenario.") — never a rating, score, or evaluative comment — then ask the next question.
 
 Format every question consistently and cleanly for readability (this is rendered in a chat bubble, markdown **bold** is supported, plain text otherwise — no other markdown):
 - Start with a bolded label on its own line, e.g. **Scenario 1:**
@@ -1931,7 +1958,9 @@ Keep every response conversational and concise."""
 
 def _build_hire_scoring_system_prompt(company_name: str, role_focus_label: str, jd_text: str = None) -> str:
     jd_block = f"\n\nThe candidate was evaluated against this actual job description — weigh your assessment against its specific requirements, not just the general {role_focus_label} title:\n--- JOB DESCRIPTION ---\n{jd_text}\n--- END JOB DESCRIPTION ---" if jd_text else ""
-    return f"""You are an expert Agile/Scrum hiring evaluator reviewing a completed scenario-based assessment transcript for a candidate applying for a {role_focus_label} position at {company_name}. Analyze the candidate's answers and call the submit_candidate_scorecard tool exactly once with a structured hiring scorecard. Write every field for a busy hiring manager who did NOT read the transcript — be specific and reference what the candidate actually said, but keep each field short. Be honest and calibrated: do not default to high scores; a vague, generic, or evasive answer should score low. Specifically note in integrity_notes if any answer sounds generic, templated, or inconsistent with the specific scenario details given, rather than a genuine response to this exact question — leave integrity_notes empty if nothing seems notable.{jd_block}
+    role_anchor = HIRE_ROLE_ANCHORS.get(role_focus_label, "")
+    role_anchor_block = f"\n\nWhat this role actually does, for reference: {role_anchor}" if role_anchor else ""
+    return f"""You are an expert Agile/Scrum hiring evaluator reviewing a completed scenario-based assessment transcript for a candidate applying for a {role_focus_label} position at {company_name}. Analyze the candidate's answers and call the submit_candidate_scorecard tool exactly once with a structured hiring scorecard. Write every field for a busy hiring manager who did NOT read the transcript — be specific and reference what the candidate actually said, but keep each field short. Be honest and calibrated: do not default to high scores; a vague, generic, or evasive answer should score low. Specifically note in integrity_notes if any answer sounds generic, templated, or inconsistent with the specific scenario details given, rather than a genuine response to this exact question — leave integrity_notes empty if nothing seems notable.{jd_block}{role_anchor_block}
 
 The transcript is followed by an INTEGRITY SIGNALS block with automatically captured data (paste count, tab/window switches, unusually fast answers) — this is ground truth from the browser, not an inference from the writing style. Treat it as at least as reliable as your own read of the text, and follow any explicit scoring instruction included in that block exactly (it may require a specific score cap or recommendation). Do not let polished or well-structured writing override a strong integrity signal. A handful of tab switches alone is not disqualifying, but combine it with a high paste count and say so."""
 
