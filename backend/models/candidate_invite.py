@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text
 from sqlalchemy.sql import func
 from database import Base
 
@@ -15,3 +15,4 @@ class CandidateInvite(Base):
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     id_photo_url = Column(String(500), nullable=True)
+    transcript_json = Column(Text, nullable=True)
