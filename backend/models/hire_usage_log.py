@@ -9,5 +9,7 @@ class HireUsageLog(Base):
     employer_user_id = Column(String(10), ForeignKey("User.user_id"))
     assessment_id = Column(String(10), ForeignKey("Assessment.assessment_id"))
     invite_token = Column(String(64), ForeignKey("CandidateInvite.invite_token"))
-    event_type = Column(String(20))  # invite_sent / candidate_started / candidate_completed
+    event_type = Column(String(20))  # invite_sent / candidate_started / candidate_completed / ai_call_message / ai_call_score
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
