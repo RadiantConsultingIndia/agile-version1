@@ -2322,7 +2322,7 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
     try:
         response = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=1024,
+            max_tokens=3000,
             thinking={"type": "disabled"},
             system=_build_hire_scoring_system_prompt(company_name, role_label, assessment.jd_text if assessment else None),
             tools=[HIRE_SCORING_TOOL],
@@ -2359,6 +2359,16 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
 
     return {"success": True}
 
+def _extract_qa_pairs(transcript_json: str):
+    """Pull real (question, answer) pairs straight from the saved transcript — no AI
+    involved, so nothing here can paraphrase or drift from what was actually said."""
+    transcript = json.loads(transcript_json or "[]")
+    pairs = []
+    for i, m in enumerate(transcript):
+        if m.get("role") == "assistant" and i + 1 < len(transcript) and transcript[i + 1].get("role") == "user":
+            pairs.append({"question": m.get("content", ""), "answer": transcript[i + 1].get("content", "")})
+    return pairs
+
 @app.get("/api/employer/assessments/{assessment_id}/invites/{invite_token}")
 def get_scorecard(assessment_id: str, invite_token: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
     assessment = _get_owned_assessment(assessment_id, current_user, db)
@@ -2378,6 +2388,7 @@ def get_scorecard(assessment_id: str, invite_token: str, current_user: User = De
         "integrity_notes": json.loads(result.integrity_notes_json or "[]"),
         "paste_count": result.paste_count, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
         "completed_at": invite.completed_at.isoformat() if invite.completed_at else None,
+        "qa_pairs": _extract_qa_pairs(result.transcript_json),
         "completed": True,
     }
 
@@ -2412,9 +2423,16 @@ def _build_hire_scorecard_pdf(candidate_name: str, company_name: str, role_label
         Paragraph("Per-Question Notes", h2),
         ListFlowable([ListItem(Paragraph(f"<b>{esc(n.get('question',''), 100)}</b> — {esc(n.get('assessment',''), 200)}", body_style)) for n in notes[:6]], bulletType='bullet'),
     ]
+    qa_pairs = _extract_qa_pairs(result.transcript_json)
+    if qa_pairs:
+        story.append(Paragraph("Full Transcript", h2))
+        for i, qa in enumerate(qa_pairs, start=1):
+            story.append(Paragraph(f"<b>Q{i}:</b> {esc(qa.get('question', ''), 600)}", body_style))
+            story.append(Paragraph(f"<b>A{i}:</b> {esc(qa.get('answer', ''), 600)}", ParagraphStyle('AnsX', parent=body_style, spaceAfter=10, textColor=colors.HexColor('#374151'))))
     if integrity:
         story.append(Paragraph("Integrity Notes", h2))
         story.append(ListFlowable([ListItem(Paragraph(esc(n), body_style)) for n in integrity[:4]], bulletType='bullet'))
+    ok_style = ParagraphStyle('OkX', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor('#15803d'), spaceBefore=10)
     flags = []
     if result.paste_count:
         flags.append(f"Candidate attempted to paste text {result.paste_count} time(s) — blocked automatically (zero-tolerance policy)")
@@ -2424,6 +2442,8 @@ def _build_hire_scorecard_pdf(candidate_name: str, company_name: str, role_label
         flags.append(f"{result.fast_answer_count} unusually fast answer(s)")
     if flags:
         story.append(Paragraph("⚠ " + "; ".join(flags), warn_style))
+    else:
+        story.append(Paragraph("✓ No integrity concerns detected — no pasting, no tab/window switching, no unusually fast answers.", ok_style))
     doc.build(story)
     return buf.getvalue()
 
