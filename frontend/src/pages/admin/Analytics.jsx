@@ -156,6 +156,33 @@ export default function AdminAnalytics() {
             <SummaryCard icon="📈" label="Completion Rate"   value={data.summary?.overall_completion_rate} suffix="%" />
           </div>
 
+          {/* AgileHire usage & Anthropic cost */}
+          <Card title="AgileHire Usage & Anthropic Cost (Est.)">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20 }}>
+              <SummaryCard icon="✉️" label="Invites Sent" value={data.hire_usage?.invites_sent} />
+              <SummaryCard icon="▶️" label="Candidates Started" value={data.hire_usage?.candidates_started} />
+              <SummaryCard icon="✅" label="Candidates Completed" value={data.hire_usage?.candidates_completed} />
+              <SummaryCard icon="🚪" label="Did Not Complete" value={data.hire_usage?.candidates_abandoned} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              {[
+                { title: 'This Month', d: data.hire_usage?.this_month },
+                { title: 'All Time', d: data.hire_usage?.all_time },
+              ].map(({ title, d }) => (
+                <div key={title} style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 14, padding: '16px 18px' }}>
+                  <p style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 12px' }}>{title}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13.5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>AI calls (Claude Sonnet 5)</span><span style={{ fontWeight: 700, color: '#0f172a' }}>{d?.ai_calls ?? 0}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>Input tokens</span><span style={{ fontWeight: 700, color: '#0f172a' }}>{(d?.input_tokens ?? 0).toLocaleString()}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>Output tokens</span><span style={{ fontWeight: 700, color: '#0f172a' }}>{(d?.output_tokens ?? 0).toLocaleString()}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid #e2e8f0' }}><span style={{ color: '#0f172a', fontWeight: 700 }}>Estimated cost</span><span style={{ fontWeight: 900, color: C, fontSize: 15 }}>${(d?.estimated_cost_usd ?? 0).toFixed(2)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: '#94a3b8', margin: '14px 0 0' }}>Estimate only, based on Claude Sonnet 5 standard rates ($3/1M input · $15/1M output tokens). Anthropic's own invoice is the authoritative cost.</p>
+          </Card>
+
           {/* Enrollment Trend */}
           <Card title="Enrollment Trend (Last 6 Months)">
             {!data.enrollments_by_month?.length ? (
