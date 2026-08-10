@@ -84,6 +84,8 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_count INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS jd_text TEXT'))
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS transcript_json TEXT'))
+    _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS input_tokens INTEGER DEFAULT 0'))
+    _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS output_tokens INTEGER DEFAULT 0'))
     _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -2268,6 +2270,11 @@ def hire_message(request: Request, invite_token: str, body: HireMessageBody, db:
         invite.started_at = datetime.now(timezone.utc)
         db.add(HireUsageLog(employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token, event_type="candidate_started"))
 
+    db.add(HireUsageLog(
+        employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token,
+        event_type="ai_call_message", input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens,
+    ))
+
     reply = next((b.text for b in response.content if b.type == "text"), "")
     updated_transcript = [{"role": m.role, "content": m.content} for m in body.messages] + [{"role": "assistant", "content": reply}]
     invite.transcript_json = json.dumps(updated_transcript)
@@ -2344,6 +2351,10 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
     invite.status = "completed"
     invite.completed_at = datetime.now(timezone.utc)
     db.add(HireUsageLog(employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token, event_type="candidate_completed"))
+    db.add(HireUsageLog(
+        employer_user_id=assessment.employer_user_id if assessment else None, assessment_id=invite.assessment_id, invite_token=invite_token,
+        event_type="ai_call_score", input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens,
+    ))
     db.commit()
 
     return {"success": True}
@@ -3130,6 +3141,42 @@ def admin_analytics(current_user: User = Depends(require_admin), db: Session = D
     ).count()
     overall_completion_rate = round(total_completions / total_enrollments * 100) if total_enrollments > 0 else 0
 
+    # AgileHire usage & Anthropic cost tracking
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    ai_call_types = ("ai_call_message", "ai_call_score")
+
+    def _hire_token_totals(query):
+        input_total = query.with_entities(func.coalesce(func.sum(HireUsageLog.input_tokens), 0)).scalar()
+        output_total = query.with_entities(func.coalesce(func.sum(HireUsageLog.output_tokens), 0)).scalar()
+        call_count = query.count()
+        return input_total, output_total, call_count
+
+    all_time_input, all_time_output, all_time_calls = _hire_token_totals(
+        db.query(HireUsageLog).filter(HireUsageLog.event_type.in_(ai_call_types))
+    )
+    month_input, month_output, month_calls = _hire_token_totals(
+        db.query(HireUsageLog).filter(HireUsageLog.event_type.in_(ai_call_types), HireUsageLog.created_at >= month_start)
+    )
+    # Estimated cost only — Claude Sonnet 5 standard rates ($3/1M input, $15/1M output). Anthropic's own
+    # invoice is authoritative; this is a directional estimate for internal awareness, not a billing figure.
+    def _estimate_cost(input_tokens, output_tokens):
+        return round((input_tokens / 1_000_000 * 3.0) + (output_tokens / 1_000_000 * 15.0), 2)
+
+    hire_usage = {
+        "invites_sent": db.query(HireUsageLog).filter(HireUsageLog.event_type == "invite_sent").count(),
+        "candidates_started": db.query(HireUsageLog).filter(HireUsageLog.event_type == "candidate_started").count(),
+        "candidates_completed": db.query(HireUsageLog).filter(HireUsageLog.event_type == "candidate_completed").count(),
+        "candidates_abandoned": db.query(HireUsageLog).filter(HireUsageLog.event_type == "candidate_abandoned").count(),
+        "all_time": {
+            "ai_calls": all_time_calls, "input_tokens": all_time_input, "output_tokens": all_time_output,
+            "estimated_cost_usd": _estimate_cost(all_time_input, all_time_output),
+        },
+        "this_month": {
+            "ai_calls": month_calls, "input_tokens": month_input, "output_tokens": month_output,
+            "estimated_cost_usd": _estimate_cost(month_input, month_output),
+        },
+    }
+
     return {
         "enrollments_by_month": enrollments_by_month,
         "programs": programs_data,
@@ -3140,6 +3187,7 @@ def admin_analytics(current_user: User = Depends(require_admin), db: Session = D
             "total_completions": total_completions,
             "overall_completion_rate": overall_completion_rate,
         },
+        "hire_usage": hire_usage,
     }
 
 
