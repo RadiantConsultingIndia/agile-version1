@@ -275,7 +275,7 @@ def assessment_invite_email(candidate_name: str, company_name: str, role_focus_l
         <h2 style="font-size:1.3rem;font-weight:700;color:#0F2645;margin-bottom:8px;">You've been invited to an assessment</h2>
         <p style="font-size:0.9rem;color:#64748B;margin-bottom:24px;line-height:1.6;">
           Hi {candidate_name}, <strong>{company_name}</strong> has invited you to complete a short {role_focus_label} hiring assessment.
-          It takes about 10-15 minutes and covers 5 realistic scenario questions — no account or download needed.
+          It takes about 30 minutes and covers 5 realistic scenario questions — no account or download needed.
         </p>
         <a href="{take_link}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#2563EB,#0EA5E9);color:white;font-weight:700;font-size:0.9rem;border-radius:10px;text-decoration:none;">
           Start Assessment →
