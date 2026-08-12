@@ -88,6 +88,7 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS id_photo_url VARCHAR(500)'))
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_count INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS jd_text TEXT'))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS description TEXT'))
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS transcript_json TEXT'))
     _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS input_tokens INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS output_tokens INTEGER DEFAULT 0'))
@@ -1937,6 +1938,7 @@ class AssessmentBody(BaseModel):
     role_focus: str
     require_id_upload: bool = False
     jd_text: Optional[str] = None
+    description: Optional[str] = None
 
 class AssessmentPatchBody(BaseModel):
     title: Optional[str] = None
@@ -1944,6 +1946,7 @@ class AssessmentPatchBody(BaseModel):
     require_id_upload: Optional[bool] = None
     jd_text: Optional[str] = None
     clear_jd: bool = False
+    description: Optional[str] = None
 
 class CandidateInviteBody(BaseModel):
     candidate_name: str
@@ -2080,6 +2083,7 @@ def list_assessments(current_user: User = Depends(require_employer), db: Session
             "status": a.status, "created_at": a.created_at.isoformat() if a.created_at else None,
             "require_id_upload": bool(a.require_id_upload),
             "has_jd": bool(a.jd_text),
+            "description": a.description,
             "invited_count": len(invites),
             "completed_count": sum(1 for i in invites if i.status == "completed"),
         })
@@ -2095,7 +2099,7 @@ def create_assessment(body: AssessmentBody, current_user: User = Depends(require
     assessment = Assessment(
         assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
         title=body.title.strip(), role_focus=body.role_focus, require_id_upload=body.require_id_upload,
-        jd_text=jd_text,
+        jd_text=jd_text, description=(body.description or "").strip() or None,
     )
     db.add(assessment)
     if jd_text:
@@ -2125,15 +2129,20 @@ async def employer_upload_jd(file: UploadFile = File(...), current_user: User = 
 def get_assessment(assessment_id: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
     assessment = _get_owned_assessment(assessment_id, current_user, db)
     invites = db.query(CandidateInvite).filter(CandidateInvite.assessment_id == assessment_id).order_by(CandidateInvite.created_at.desc()).all()
+    results = db.query(CandidateResult).filter(CandidateResult.invite_token.in_([i.invite_token for i in invites])).all()
+    results_by_token = {r.invite_token: r for r in results}
     return {
         "assessment_id": assessment.assessment_id, "title": assessment.title, "role_focus": assessment.role_focus,
         "role_focus_label": ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus),
         "status": assessment.status, "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
         "require_id_upload": bool(assessment.require_id_upload),
         "jd_text": assessment.jd_text,
+        "description": assessment.description,
         "candidates": [{
             "invite_token": i.invite_token, "candidate_name": i.candidate_name, "candidate_email": i.candidate_email,
             "status": i.status, "created_at": i.created_at.isoformat() if i.created_at else None,
+            "overall_score": results_by_token[i.invite_token].overall_score if i.invite_token in results_by_token else None,
+            "recommendation": results_by_token[i.invite_token].recommendation if i.invite_token in results_by_token else None,
         } for i in invites],
     }
 
@@ -2148,6 +2157,8 @@ def patch_assessment(assessment_id: str, body: AssessmentPatchBody, current_user
         assessment.status = body.status
     if body.require_id_upload is not None:
         assessment.require_id_upload = body.require_id_upload
+    if body.description is not None:
+        assessment.description = body.description.strip() or None
     if body.clear_jd:
         assessment.jd_text = None
     elif body.jd_text is not None:
