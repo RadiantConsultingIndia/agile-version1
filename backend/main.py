@@ -79,6 +79,11 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "AIInterviewAccess" ADD COLUMN IF NOT EXISTS credits_remaining INTEGER DEFAULT 0'))
     _conn.execute(text('UPDATE "AIInterviewAccess" SET credits_remaining = 20 WHERE has_access = true AND credits_remaining = 0'))
     _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)'))
+    _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS website VARCHAR(300)'))
+    _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS location VARCHAR(200)'))
+    _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS description TEXT'))
+    _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS linkedin_url VARCHAR(300)'))
+    _conn.execute(text('ALTER TABLE "EmployerProfile" ADD COLUMN IF NOT EXISTS contact_email VARCHAR(150)'))
     _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS require_id_upload BOOLEAN DEFAULT FALSE'))
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS id_photo_url VARCHAR(500)'))
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_count INTEGER DEFAULT 0'))
@@ -1864,6 +1869,30 @@ class EmployerProfileBody(BaseModel):
     company_name: str
     industry: Optional[str] = None
     company_size: Optional[str] = None
+    website: Optional[str] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    contact_email: Optional[str] = None
+
+    @field_validator('industry', 'company_size', 'website', 'location', 'description', 'linkedin_url', 'contact_email', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        return None if v == '' else v
+
+    @field_validator('website', 'linkedin_url')
+    @classmethod
+    def validate_url_shape(cls, v):
+        if v is not None and not re.match(r'^https?://[\w\-.]+\.\w{2,}', v):
+            raise ValueError('Must be a valid URL starting with http:// or https://')
+        return v
+
+    @field_validator('contact_email')
+    @classmethod
+    def validate_contact_email(cls, v):
+        if v is not None and not validate_generic_email(v):
+            raise ValueError('Must be a valid email address')
+        return v
 
 @app.get("/api/employer/profile")
 def get_employer_profile(current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
@@ -1874,6 +1903,9 @@ def get_employer_profile(current_user: User = Depends(require_employer), db: Ses
         "full_name": current_user.full_name, "email": current_user.email,
         "company_name": profile.company_name, "industry": profile.industry,
         "company_size": profile.company_size, "logo_url": profile.logo_url,
+        "website": profile.website, "location": profile.location,
+        "description": profile.description, "linkedin_url": profile.linkedin_url,
+        "contact_email": profile.contact_email,
     }
 
 @app.put("/api/employer/profile")
@@ -1884,6 +1916,11 @@ def update_employer_profile(body: EmployerProfileBody, current_user: User = Depe
     profile.company_name = body.company_name
     profile.industry = body.industry
     profile.company_size = body.company_size
+    profile.website = body.website
+    profile.location = body.location
+    profile.description = body.description
+    profile.linkedin_url = body.linkedin_url
+    profile.contact_email = body.contact_email
     db.commit()
     return {"success": True}
 
