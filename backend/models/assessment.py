@@ -12,4 +12,5 @@ class Assessment(Base):
     status = Column(String(20), default="active")  # active / archived
     require_id_upload = Column(Boolean, default=False)
     jd_text = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
