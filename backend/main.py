@@ -19,6 +19,7 @@ import docx
 
 from fastapi import FastAPI, Depends, Cookie, HTTPException, File, UploadFile, Form, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -2535,6 +2536,7 @@ def get_scorecard(assessment_id: str, invite_token: str, current_user: User = De
         "integrity_notes": json.loads(result.integrity_notes_json or "[]"),
         "competency_scores": json.loads(result.competency_scores_json or "[]"),
         "paste_count": result.paste_count, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
+        "started_at": invite.started_at.isoformat() if invite.started_at else None,
         "completed_at": invite.completed_at.isoformat() if invite.completed_at else None,
         "qa_pairs": _extract_qa_pairs(result.transcript_json),
         "completed": True,
@@ -3562,3 +3564,9 @@ def export_completions(current_user: User = Depends(require_admin), db: Session 
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=completions.csv"},
     )
+
+# Render terminates TLS and proxies every request through its own edge, so without this,
+# slowapi's get_remote_address() sees Render's proxy IP for every candidate/user — making
+# every @limiter.limit() effectively a single shared limit across all traffic instead of
+# per-visitor. This reads the real client IP from X-Forwarded-For, set by Render's proxy.
+app = ProxyHeadersMiddleware(app, trusted_hosts="*")
