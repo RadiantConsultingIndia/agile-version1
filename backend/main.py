@@ -97,6 +97,8 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS transcript_json TEXT'))
     _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS input_tokens INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS output_tokens INTEGER DEFAULT 0'))
+    _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS competency_scores_json TEXT'))
+    _conn.execute(text('ALTER TABLE "CandidateResult" ALTER COLUMN recommendation TYPE VARCHAR(30)'))
     _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -2082,6 +2084,9 @@ def _build_hire_scoring_system_prompt(company_name: str, role_focus_label: str, 
     role_anchor_block = f"\n\nWhat this role actually does, for reference: {role_anchor}" if role_anchor else ""
     return f"""You are an expert Agile/Scrum hiring evaluator reviewing a completed scenario-based assessment transcript for a candidate applying for a {role_focus_label} position at {company_name}. Analyze the candidate's answers and call the submit_candidate_scorecard tool exactly once with a structured hiring scorecard. Write every field for a busy hiring manager who did NOT read the transcript — be specific and reference what the candidate actually said, but keep each field short. Be honest and calibrated: do not default to high scores; a vague, generic, or evasive answer should score low. Specifically note in integrity_notes if any answer sounds generic, templated, or inconsistent with the specific scenario details given, rather than a genuine response to this exact question — leave integrity_notes empty if nothing seems notable.{jd_block}{role_anchor_block}
 
+For competency_scores, score the candidate ONLY against whichever of these 8 categories the actual questions in the transcript drew on — do not invent a score for a category that wasn't actually touched on, and do not pad the list to hit a target count:
+{HIRE_CHALLENGE_CATEGORIES}
+
 The transcript is followed by an INTEGRITY SIGNALS block with automatically captured data (paste count, tab/window switches, unusually fast answers) — this is ground truth from the browser, not an inference from the writing style. Treat it as at least as reliable as your own read of the text, and follow any explicit scoring instruction included in that block exactly (it may require a specific score cap or recommendation). Do not let polished or well-structured writing override a strong integrity signal. A handful of tab switches alone is not disqualifying, but combine it with a high paste count and say so."""
 
 HIRE_SCORING_TOOL = {
@@ -2092,10 +2097,24 @@ HIRE_SCORING_TOOL = {
         "type": "object",
         "properties": {
             "overall_score": {"type": "integer", "description": "Overall score from 0 to 100."},
-            "recommendation": {"type": "string", "enum": ["Strong Fit", "Fit", "Borderline", "Not a Fit"]},
-            "summary": {"type": "string", "description": "2-3 sentence recruiter-facing summary."},
+            "recommendation": {"type": "string", "enum": ["Strong Match", "Consider", "Needs Further Evaluation", "Not Recommended"]},
+            "summary": {"type": "string", "description": "2-3 sentence recruiter-facing summary of overall performance, to support (not replace) the recruiter's own judgement."},
             "strengths": {"type": "array", "items": {"type": "string"}, "description": "2-4 specific strengths."},
-            "gaps": {"type": "array", "items": {"type": "string"}, "description": "2-4 specific gaps."},
+            "gaps": {"type": "array", "items": {"type": "string"}, "description": "2-3 specific areas the recruiter should explore further with the candidate."},
+            "competency_scores": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "category": {"type": "string", "description": "One of the 8 challenge categories, exactly as named in the category list."},
+                        "score": {"type": "integer", "description": "0-100 score for how the candidate performed against this specific category."},
+                    },
+                    "required": ["category", "score"],
+                    "additionalProperties": False,
+                },
+                "minItems": 1,
+                "description": "One entry per challenge category actually drawn on by the transcript's questions — never leave this empty, never invent a category that wasn't tested.",
+            },
             "per_question_notes": {
                 "type": "array",
                 "items": {
@@ -2116,7 +2135,7 @@ HIRE_SCORING_TOOL = {
                 "description": "Notes on any answers that seemed generic, templated, or inconsistent with the specific scenario — empty array if nothing notable.",
             },
         },
-        "required": ["overall_score", "recommendation", "summary", "strengths", "gaps", "per_question_notes", "integrity_notes"],
+        "required": ["overall_score", "recommendation", "summary", "strengths", "gaps", "competency_scores", "per_question_notes", "integrity_notes"],
         "additionalProperties": False,
     },
 }
@@ -2442,7 +2461,7 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
         integrity_block += (
             f"\nThis assessment has ZERO TOLERANCE for pasting — any attempt at all, even one, is an automatic reject regardless of how strong "
             f"the typed content reads. Since paste_count is {body.paste_count} (greater than 0), overall_score MUST be 20 or lower and "
-            f"recommendation MUST be \"Not a Fit\". State this plainly as the primary reason in both summary and integrity_notes.\n"
+            f"recommendation MUST be \"Not Recommended\". State this plainly as the primary reason in both summary and integrity_notes.\n"
         )
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -2472,6 +2491,7 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
         summary=scored.get("summary"), strengths_json=json.dumps(scored.get("strengths", [])),
         gaps_json=json.dumps(scored.get("gaps", [])), per_question_notes_json=json.dumps(scored.get("per_question_notes", [])),
         integrity_notes_json=json.dumps(scored.get("integrity_notes", [])),
+        competency_scores_json=json.dumps(scored.get("competency_scores", [])),
         paste_count=body.paste_count, tab_switch_count=body.tab_switch_count, fast_answer_count=body.fast_answer_count,
     )
     db.add(result)
@@ -2513,6 +2533,7 @@ def get_scorecard(assessment_id: str, invite_token: str, current_user: User = De
         "summary": result.summary, "strengths": json.loads(result.strengths_json or "[]"),
         "gaps": json.loads(result.gaps_json or "[]"), "per_question_notes": json.loads(result.per_question_notes_json or "[]"),
         "integrity_notes": json.loads(result.integrity_notes_json or "[]"),
+        "competency_scores": json.loads(result.competency_scores_json or "[]"),
         "paste_count": result.paste_count, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
         "completed_at": invite.completed_at.isoformat() if invite.completed_at else None,
         "qa_pairs": _extract_qa_pairs(result.transcript_json),
@@ -2537,15 +2558,24 @@ def _build_hire_scorecard_pdf(candidate_name: str, company_name: str, role_label
     gaps = json.loads(result.gaps_json or "[]")
     notes = json.loads(result.per_question_notes_json or "[]")
     integrity = json.loads(result.integrity_notes_json or "[]")
+    competency_scores = json.loads(result.competency_scores_json or "[]")
+    disclaimer_style = ParagraphStyle('DisclaimerX', parent=styles['Normal'], fontSize=8.5, textColor=colors.HexColor('#94a3b8'), spaceAfter=10)
 
     story = [
         Paragraph("Hiring Assessment Scorecard", title_style),
         Paragraph(f"{esc(candidate_name, 100)} &nbsp;|&nbsp; {esc(role_label, 60)} &nbsp;|&nbsp; {esc(company_name, 80)} &nbsp;|&nbsp; {datetime.now().strftime('%B %d, %Y')}", meta_style),
         Paragraph(f"Overall Score: {result.overall_score}/100 — {esc(result.recommendation, 40)}", h2),
+        Paragraph("AI Candidate Insights", h2),
         Paragraph(esc(result.summary, 400), body_style),
+        Paragraph("AI-generated insights are intended to support recruiter evaluation and should not replace human judgement.", disclaimer_style),
+    ]
+    if competency_scores:
+        story.append(Paragraph("Competency Breakdown", h2))
+        story.append(ListFlowable([ListItem(Paragraph(f"{esc(c.get('category',''), 100)} — {c.get('score','')}/100", body_style)) for c in competency_scores[:8]], bulletType='bullet'))
+    story += [
         Paragraph("Strengths", h2),
         ListFlowable([ListItem(Paragraph(esc(s), body_style)) for s in strengths[:4]], bulletType='bullet'),
-        Paragraph("Gaps", h2),
+        Paragraph("Areas to Explore", h2),
         ListFlowable([ListItem(Paragraph(esc(g), body_style)) for g in gaps[:4]], bulletType='bullet'),
         Paragraph("Per-Question Notes", h2),
         ListFlowable([ListItem(Paragraph(f"<b>{esc(n.get('question',''), 100)}</b> — {esc(n.get('assessment',''), 200)}", body_style)) for n in notes[:6]], bulletType='bullet'),
