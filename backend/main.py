@@ -89,6 +89,11 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_count INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS jd_text TEXT'))
     _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS description TEXT'))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS experience_level VARCHAR(20)'))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS num_questions INTEGER DEFAULT 5'))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30'))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS difficulty VARCHAR(10) DEFAULT \'medium\''))
+    _conn.execute(text('ALTER TABLE "Assessment" ADD COLUMN IF NOT EXISTS question_style VARCHAR(20) DEFAULT \'scenario\''))
     _conn.execute(text('ALTER TABLE "CandidateInvite" ADD COLUMN IF NOT EXISTS transcript_json TEXT'))
     _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS input_tokens INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS output_tokens INTEGER DEFAULT 0'))
@@ -1933,12 +1938,48 @@ ROLE_FOCUS_LABELS = {
 }
 INVITE_EXPIRY_DAYS = 14
 
+VALID_DIFFICULTIES = {"easy", "medium", "hard"}
+VALID_QUESTION_STYLES = {"scenario", "situational", "short_answer"}
+
 class AssessmentBody(BaseModel):
     title: str
     role_focus: str
     require_id_upload: bool = False
     jd_text: Optional[str] = None
     description: Optional[str] = None
+    experience_level: Optional[str] = None
+    num_questions: int = 5
+    duration_minutes: int = 30
+    difficulty: str = "medium"
+    question_style: str = "scenario"
+
+    @field_validator('num_questions')
+    @classmethod
+    def validate_num_questions(cls, v):
+        if not (3 <= v <= 8):
+            raise ValueError('Number of questions must be between 3 and 8')
+        return v
+
+    @field_validator('duration_minutes')
+    @classmethod
+    def validate_duration(cls, v):
+        if not (5 <= v <= 90):
+            raise ValueError('Duration must be between 5 and 90 minutes')
+        return v
+
+    @field_validator('difficulty')
+    @classmethod
+    def validate_difficulty(cls, v):
+        if v not in VALID_DIFFICULTIES:
+            raise ValueError(f'Difficulty must be one of {sorted(VALID_DIFFICULTIES)}')
+        return v
+
+    @field_validator('question_style')
+    @classmethod
+    def validate_question_style(cls, v):
+        if v not in VALID_QUESTION_STYLES:
+            raise ValueError(f'Question style must be one of {sorted(VALID_QUESTION_STYLES)}')
+        return v
 
 class AssessmentPatchBody(BaseModel):
     title: Optional[str] = None
@@ -1977,38 +2018,61 @@ HIRE_CHALLENGE_CATEGORIES = """1. Stakeholder conflict & negotiation — competi
 7. Cross-team or cross-functional dependency coordination
 8. Client/customer-facing pressure or expectation management"""
 
-def _build_hire_system_prompt(company_name: str, role_focus_label: str, jd_text: str = None) -> str:
+HIRE_DIFFICULTY_TEXT = {
+    "easy": "Calibrate for someone newer to the role — scenarios should still be realistic, but with a clearer path to a reasonable answer and less ambiguity stacked on top of itself.",
+    "medium": "Make every scenario genuinely challenging for an experienced professional — include realistic ambiguity, competing constraints, incomplete information, or conflicting incentives. Avoid straightforward textbook \"what would you do\" setups with one obvious right answer; a strong scenario should have real tension and no clean, universally-agreed-upon resolution.",
+    "hard": "Push harder than usual — stack multiple competing constraints, ambiguous or conflicting information, and no clean universally-agreed resolution. This should be genuinely difficult even for a strong, experienced candidate.",
+}
+
+HIRE_EXPERIENCE_TEXT = {
+    "fresher": "The candidate is a fresher/entry-level with little to no hands-on experience — calibrate scenarios and expectations accordingly; don't assume years of practical exposure.",
+    "1-3": "The candidate has roughly 1-3 years of experience — calibrate scenarios and expectations accordingly.",
+    "3-5": "The candidate has roughly 3-5 years of experience — calibrate scenarios and expectations accordingly, expecting solid practical judgment.",
+    "5+": "The candidate has 5+ years of experience — calibrate scenarios and expectations accordingly, expecting seasoned, nuanced judgment and awareness of second-order consequences.",
+}
+
+HIRE_QUESTION_STYLE_TEXT = {
+    "scenario": "Frame each question as a scenario: describe a realistic on-the-job situation in 2-4 concise sentences, then ask what the candidate would do.",
+    "situational": "Frame each question as a direct situational-judgment call: a shorter, punchier \"what would you do if...\" setup rather than a long narrative — get to the judgment call quickly.",
+    "short_answer": "Ask each question directly and expect a short, focused answer (explicitly tell the candidate 2-4 sentences is plenty) rather than a long narrative response.",
+}
+HIRE_QUESTION_STYLE_LABEL = {"scenario": "Scenario", "situational": "Situation", "short_answer": "Question"}
+
+def _build_hire_system_prompt(company_name: str, role_focus_label: str, jd_text: str = None, num_questions: int = 5, experience_level: str = None, difficulty: str = "medium", question_style: str = "scenario") -> str:
     role_anchor = HIRE_ROLE_ANCHORS.get(role_focus_label, "")
     role_anchor_block = f"\n\nWhat this role actually does (stay grounded in this — do not write a scenario that's really a different Agile role's job):\n{role_anchor}" if role_anchor else ""
+    experience_block = f"\n\n{HIRE_EXPERIENCE_TEXT[experience_level]}" if experience_level in HIRE_EXPERIENCE_TEXT else ""
+    style_label = HIRE_QUESTION_STYLE_LABEL.get(question_style, "Scenario")
+    style_text = HIRE_QUESTION_STYLE_TEXT.get(question_style, HIRE_QUESTION_STYLE_TEXT["scenario"])
     if jd_text:
-        scenario_source = f"""The employer has provided the actual job description for this role, given below. Ground each scenario's specific details (team, product, stakeholders) in this JD's context rather than generic textbook settings — invent realistic on-the-job situations that a candidate would genuinely face in *this* role as described.
+        scenario_source = f"""The employer has provided the actual job description for this role, given below. Ground each question's specific details (team, product, stakeholders) in this JD's context rather than generic textbook settings — invent realistic on-the-job situations that a candidate would genuinely face in *this* role as described.
 
 --- JOB DESCRIPTION ---
 {jd_text}
 --- END JOB DESCRIPTION ---
 
-Even though the scenarios are grounded in this JD, still draw the 5 questions from 5 DIFFERENT categories in this list — do not let the JD pull every question toward the same theme:
+Even though questions are grounded in this JD, still draw them from {num_questions} DIFFERENT categories in this list — do not let the JD pull every question toward the same theme:
 {HIRE_CHALLENGE_CATEGORIES}"""
     else:
-        scenario_source = f"""Draw the 5 questions from 5 DIFFERENT categories below — pick exactly one question per category, never two questions from the same category, so the assessment covers real breadth for a {role_focus_label} rather than repeating one theme:
+        scenario_source = f"""Draw the {num_questions} questions from {num_questions} DIFFERENT categories below — pick exactly one question per category, never two questions from the same category, so the assessment covers real breadth for a {role_focus_label} rather than repeating one theme:
 {HIRE_CHALLENGE_CATEGORIES}
 Invent fresh, specific scenario details each time (team names, numbers, concrete situations) rather than generic textbook phrasing, so each assessment feels distinct."""
 
-    return f"""You are conducting a scenario-based hiring assessment on behalf of {company_name} for a {role_focus_label} position. This is a real hiring evaluation, not a practice session — the candidate's answers will be scored and shared with the hiring team, so stay professional, neutral, and encouraging, but do not coach, hint, or give feedback on answer quality during the conversation.{role_anchor_block}
+    return f"""You are conducting a hiring assessment on behalf of {company_name} for a {role_focus_label} position. This is a real hiring evaluation, not a practice session — the candidate's answers will be scored and shared with the hiring team, so stay professional, neutral, and encouraging, but do not coach, hint, or give feedback on answer quality during the conversation.{role_anchor_block}{experience_block}
 
-Ask exactly 5 scenario-based questions, one at a time. {scenario_source}
+Ask exactly {num_questions} questions, one at a time. {style_text} {scenario_source}
 
-Make every scenario genuinely challenging for an experienced professional — include realistic ambiguity, competing constraints, incomplete information, or conflicting incentives. Avoid straightforward textbook "what would you do" setups with one obvious right answer; a strong scenario should have real tension and no clean, universally-agreed-upon resolution.
+{HIRE_DIFFICULTY_TEXT.get(difficulty, HIRE_DIFFICULTY_TEXT["medium"])}
 
-After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next scenario.") — never a rating, score, or evaluative comment — then ask the next question.
+After each answer, reply with only a brief neutral acknowledgment (one short sentence, e.g. "Thanks, let's move to the next one.") — never a rating, score, or evaluative comment — then ask the next question.
 
 Format every question consistently and cleanly for readability (this is rendered in a chat bubble, markdown **bold** is supported, plain text otherwise — no other markdown):
-- Start with a bolded label on its own line, e.g. **Scenario 1:**
-- Leave a blank line, then describe the situation in 2-4 concise sentences.
+- Start with a bolded label on its own line, e.g. **{style_label} 1:**
+- Leave a blank line, then describe the situation concisely.
 - Leave another blank line, then ask the actual question as its own short sentence.
-Keep the opening pleasantry (e.g. "Let's begin with the first scenario:") on its own line before the label, not crammed into the same paragraph as the scenario text.
+Keep the opening pleasantry (e.g. "Let's begin:") on its own line before the label, not crammed into the same paragraph as the question text.
 
-After the candidate answers the 5th and final question, thank them warmly, let them know {company_name} will review responses and follow up if there's a match, and do NOT reveal any score. Immediately after that, on its own with nothing else before or after it, append the exact literal text [[ASSESSMENT_COMPLETE]] — a hidden marker for the app only; never mention it.
+After the candidate answers the {num_questions}th and final question, thank them warmly, let them know {company_name} will review responses and follow up if there's a match, and do NOT reveal any score. Immediately after that, on its own with nothing else before or after it, append the exact literal text [[ASSESSMENT_COMPLETE]] — a hidden marker for the app only; never mention it.
 
 Keep every response conversational and concise."""
 
@@ -2100,6 +2164,8 @@ def create_assessment(body: AssessmentBody, current_user: User = Depends(require
         assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
         title=body.title.strip(), role_focus=body.role_focus, require_id_upload=body.require_id_upload,
         jd_text=jd_text, description=(body.description or "").strip() or None,
+        experience_level=body.experience_level, num_questions=body.num_questions,
+        duration_minutes=body.duration_minutes, difficulty=body.difficulty, question_style=body.question_style,
     )
     db.add(assessment)
     if jd_text:
@@ -2138,6 +2204,9 @@ def get_assessment(assessment_id: str, current_user: User = Depends(require_empl
         "require_id_upload": bool(assessment.require_id_upload),
         "jd_text": assessment.jd_text,
         "description": assessment.description,
+        "experience_level": assessment.experience_level, "num_questions": assessment.num_questions,
+        "duration_minutes": assessment.duration_minutes, "difficulty": assessment.difficulty,
+        "question_style": assessment.question_style,
         "candidates": [{
             "invite_token": i.invite_token, "candidate_name": i.candidate_name, "candidate_email": i.candidate_email,
             "status": i.status, "created_at": i.created_at.isoformat() if i.created_at else None,
@@ -2235,6 +2304,7 @@ def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
         "id_photo_uploaded": bool(invite.id_photo_url),
         "expires_at": invite.expires_at.isoformat(),
         "transcript": json.loads(invite.transcript_json) if invite.transcript_json else [],
+        "duration_minutes": assessment.duration_minutes if assessment and assessment.duration_minutes else 30,
     }
 
 @app.post("/api/public/hire/{invite_token}/quit")
@@ -2306,7 +2376,13 @@ def hire_message(request: Request, invite_token: str, body: HireMessageBody, db:
         response = client.messages.create(
             model="claude-sonnet-5",
             max_tokens=500,
-            system=_build_hire_system_prompt(company_name, role_label, assessment.jd_text if assessment else None),
+            system=_build_hire_system_prompt(
+                company_name, role_label, assessment.jd_text if assessment else None,
+                num_questions=assessment.num_questions if assessment and assessment.num_questions else 5,
+                experience_level=assessment.experience_level if assessment else None,
+                difficulty=assessment.difficulty if assessment and assessment.difficulty else "medium",
+                question_style=assessment.question_style if assessment and assessment.question_style else "scenario",
+            ),
             messages=[{"role": m.role, "content": m.content} for m in body.messages],
         )
     except anthropic.APIError as e:
@@ -2344,10 +2420,13 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
         raise HTTPException(status_code=410, detail="This assessment link has expired.")
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="Assessment isn't configured yet. Please try again later.")
-    if len(body.messages) < 4:
-        raise HTTPException(status_code=400, detail="Please answer all questions before submitting.")
 
     assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
+    num_questions = assessment.num_questions if assessment and assessment.num_questions else 5
+    min_messages = max(2, num_questions * 2 - 2)
+    if len(body.messages) < min_messages:
+        raise HTTPException(status_code=400, detail="Please answer all questions before submitting.")
+
     employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
     company_name = employer_profile.company_name if employer_profile else "the company"
     role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus) if assessment else "the role"
