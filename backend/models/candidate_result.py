@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from database import Base
 
@@ -20,4 +20,5 @@ class CandidateResult(Base):
     paste_suspicious_count = Column(Integer, default=0)
     tab_switch_count = Column(Integer, default=0)
     fast_answer_count = Column(Integer, default=0)
+    timed_out = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
