@@ -101,6 +101,7 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS competency_scores_json TEXT'))
     _conn.execute(text('ALTER TABLE "CandidateResult" ALTER COLUMN recommendation TYPE VARCHAR(30)'))
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_suspicious_count INTEGER DEFAULT 0'))
+    _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS timed_out BOOLEAN DEFAULT FALSE'))
     _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -1944,6 +1945,7 @@ INVITE_EXPIRY_DAYS = 14
 
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 VALID_QUESTION_STYLES = {"scenario", "situational", "short_answer"}
+VALID_DURATIONS = {15, 30, 45, 60}
 
 class AssessmentBody(BaseModel):
     title: str
@@ -1967,8 +1969,8 @@ class AssessmentBody(BaseModel):
     @field_validator('duration_minutes')
     @classmethod
     def validate_duration(cls, v):
-        if not (5 <= v <= 90):
-            raise ValueError('Duration must be between 5 and 90 minutes')
+        if v not in VALID_DURATIONS:
+            raise ValueError(f'Duration must be one of {sorted(VALID_DURATIONS)} minutes')
         return v
 
     @field_validator('difficulty')
@@ -1992,6 +1994,47 @@ class AssessmentPatchBody(BaseModel):
     jd_text: Optional[str] = None
     clear_jd: bool = False
     description: Optional[str] = None
+    role_focus: Optional[str] = None
+    experience_level: Optional[str] = None
+    num_questions: Optional[int] = None
+    duration_minutes: Optional[int] = None
+    difficulty: Optional[str] = None
+    question_style: Optional[str] = None
+
+    @field_validator('role_focus')
+    @classmethod
+    def validate_role_focus_patch(cls, v):
+        if v is not None and v not in ROLE_FOCUS_LABELS:
+            raise ValueError('Invalid role_focus')
+        return v
+
+    @field_validator('num_questions')
+    @classmethod
+    def validate_num_questions_patch(cls, v):
+        if v is not None and not (3 <= v <= 8):
+            raise ValueError('Number of questions must be between 3 and 8')
+        return v
+
+    @field_validator('duration_minutes')
+    @classmethod
+    def validate_duration_patch(cls, v):
+        if v is not None and v not in VALID_DURATIONS:
+            raise ValueError(f'Duration must be one of {sorted(VALID_DURATIONS)} minutes')
+        return v
+
+    @field_validator('difficulty')
+    @classmethod
+    def validate_difficulty_patch(cls, v):
+        if v is not None and v not in VALID_DIFFICULTIES:
+            raise ValueError(f'Difficulty must be one of {sorted(VALID_DIFFICULTIES)}')
+        return v
+
+    @field_validator('question_style')
+    @classmethod
+    def validate_question_style_patch(cls, v):
+        if v is not None and v not in VALID_QUESTION_STYLES:
+            raise ValueError(f'Question style must be one of {sorted(VALID_QUESTION_STYLES)}')
+        return v
 
 class CandidateInviteBody(BaseModel):
     candidate_name: str
@@ -2006,6 +2049,7 @@ class HireSubmitBody(BaseModel):
     paste_suspicious_count: int = 0  # of paste_count, how many did NOT match the current question's text (i.e. likely outside content, not the candidate copying the question back)
     tab_switch_count: int = 0
     fast_answer_count: int = 0
+    timed_out: bool = False  # the candidate ran out of time before answering every question — score whatever was actually answered instead of rejecting the submission
 
 HIRE_ROLE_ANCHORS = {
     "Scrum Master": "A Scrum Master facilitates ceremonies (standups, sprint planning, retros), removes impediments blocking the team, coaches Agile practices, protects the team from scope creep and outside interruptions, and tracks sprint/team health. A Scrum Master does NOT own the product backlog or make business prioritization calls (that's the Product Owner), and does NOT own project-level budget/timeline reporting to executives (that's the Project Manager).",
@@ -2256,6 +2300,34 @@ def patch_assessment(assessment_id: str, body: AssessmentPatchBody, current_user
         assessment.jd_text = body.jd_text.strip()[:MAX_JD_TEXT_CHARS] or None
         if assessment.jd_text:
             _save_employer_jd(db, current_user.user_id, assessment.title, assessment.jd_text)
+    if body.role_focus is not None:
+        assessment.role_focus = body.role_focus
+    if body.experience_level is not None:
+        assessment.experience_level = body.experience_level or None
+    if body.num_questions is not None:
+        assessment.num_questions = body.num_questions
+    if body.duration_minutes is not None:
+        assessment.duration_minutes = body.duration_minutes
+    if body.difficulty is not None:
+        assessment.difficulty = body.difficulty
+    if body.question_style is not None:
+        assessment.question_style = body.question_style
+    db.commit()
+    return {"success": True}
+
+@app.delete("/api/employer/assessments/{assessment_id}")
+def delete_assessment(assessment_id: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
+    assessment = _get_owned_assessment(assessment_id, current_user, db)
+    invites = db.query(CandidateInvite).filter(CandidateInvite.assessment_id == assessment_id).all()
+    if any(i.status == "completed" for i in invites):
+        raise HTTPException(status_code=400, detail="This assessment has completed candidates with scorecards and can't be deleted. Archive it instead to hide it without losing that data.")
+    db.query(HireUsageLog).filter(HireUsageLog.assessment_id == assessment_id).delete(synchronize_session=False)
+    db.query(CandidateInvite).filter(CandidateInvite.assessment_id == assessment_id).delete(synchronize_session=False)
+    if invites:
+        access = db.query(EmployerAssessmentCredits).filter(EmployerAssessmentCredits.user_id == current_user.user_id).first()
+        if access:
+            access.credits_remaining += len(invites)
+    db.delete(assessment)
     db.commit()
     return {"success": True}
 
@@ -2320,6 +2392,13 @@ def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=410, detail="This assessment link has expired or already been completed.")
     assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
     employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
+    duration_minutes = assessment.duration_minutes if assessment and assessment.duration_minutes else 30
+    full_seconds = duration_minutes * 60
+    if invite.started_at:
+        elapsed = (datetime.now(timezone.utc) - invite.started_at.replace(tzinfo=timezone.utc)).total_seconds()
+        seconds_remaining = max(0, int(full_seconds - elapsed))
+    else:
+        seconds_remaining = full_seconds
     return {
         "candidate_name": invite.candidate_name,
         "company_name": employer_profile.company_name if employer_profile else "the company",
@@ -2331,7 +2410,8 @@ def public_hire_invite(invite_token: str, db: Session = Depends(get_db)):
         "id_photo_uploaded": bool(invite.id_photo_url),
         "expires_at": invite.expires_at.isoformat(),
         "transcript": json.loads(invite.transcript_json) if invite.transcript_json else [],
-        "duration_minutes": assessment.duration_minutes if assessment and assessment.duration_minutes else 30,
+        "duration_minutes": duration_minutes,
+        "seconds_remaining": seconds_remaining,
     }
 
 @app.post("/api/public/hire/{invite_token}/quit")
@@ -2451,8 +2531,10 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
     assessment = db.query(Assessment).filter(Assessment.assessment_id == invite.assessment_id).first()
     num_questions = assessment.num_questions if assessment and assessment.num_questions else 5
     min_messages = max(2, num_questions * 2 - 2)
-    if len(body.messages) < min_messages:
+    if not body.timed_out and len(body.messages) < min_messages:
         raise HTTPException(status_code=400, detail="Please answer all questions before submitting.")
+    if body.timed_out and len(body.messages) < 3:
+        raise HTTPException(status_code=400, detail="Not enough of the assessment was completed to submit.")
 
     employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == assessment.employer_user_id).first() if assessment else None
     company_name = employer_profile.company_name if employer_profile else "the company"
@@ -2461,8 +2543,14 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
     transcript_text = "\n\n".join(f"{m.role.upper()}: {m.content}" for m in body.messages)
     suspicious_pastes = max(0, min(body.paste_suspicious_count, body.paste_count))
     question_copy_pastes = body.paste_count - suspicious_pastes
+    timeout_note = (
+        "\n[TIMED OUT] The candidate ran out of the allotted assessment time before answering every question — this transcript may end "
+        "before the final question(s). Score only the questions actually answered; do not penalize them for not reaching further questions, "
+        "and do not treat the early ending as a refusal or integrity concern.\n"
+    ) if body.timed_out else ""
     integrity_block = (
         f"\n\n[INTEGRITY SIGNALS — captured automatically by the browser during the assessment, not derived from the writing itself]\n"
+        f"{timeout_note}"
         f"- The candidate attempted to paste text {body.paste_count} time(s) (pasting is disabled in the answer box, so these attempts were blocked automatically and never reached the answer text).\n"
         f"- Candidate switched away from the assessment tab/window or exited fullscreen {body.tab_switch_count} time(s).\n"
         f"- {body.fast_answer_count} answer(s) were submitted unusually fast for their length.\n"
@@ -2518,6 +2606,7 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
         competency_scores_json=json.dumps(scored.get("competency_scores", [])),
         paste_count=body.paste_count, paste_suspicious_count=suspicious_pastes,
         tab_switch_count=body.tab_switch_count, fast_answer_count=body.fast_answer_count,
+        timed_out=body.timed_out,
     )
     db.add(result)
     invite.status = "completed"
@@ -2560,6 +2649,7 @@ def get_scorecard(assessment_id: str, invite_token: str, current_user: User = De
         "integrity_notes": json.loads(result.integrity_notes_json or "[]"),
         "competency_scores": json.loads(result.competency_scores_json or "[]"),
         "paste_count": result.paste_count, "paste_suspicious_count": result.paste_suspicious_count, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
+        "timed_out": bool(result.timed_out),
         "started_at": invite.started_at.isoformat() if invite.started_at else None,
         "completed_at": invite.completed_at.isoformat() if invite.completed_at else None,
         "qa_pairs": _extract_qa_pairs(result.transcript_json),
@@ -2616,6 +2706,9 @@ def _build_hire_scorecard_pdf(candidate_name: str, company_name: str, role_label
         story.append(Paragraph("Integrity Notes", h2))
         story.append(ListFlowable([ListItem(Paragraph(esc(n), body_style)) for n in integrity[:4]], bulletType='bullet'))
     ok_style = ParagraphStyle('OkX', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor('#15803d'), spaceBefore=10)
+    if result.timed_out:
+        info_style = ParagraphStyle('InfoX', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor('#92400e'), spaceBefore=10)
+        story.append(Paragraph("⏱ This candidate ran out of time before answering every question — scored on what was actually answered.", info_style))
     flags = []
     if result.paste_count:
         suspicious_note = f", {result.paste_suspicious_count} not matching the question text" if result.paste_suspicious_count else " — all matched the question text"
