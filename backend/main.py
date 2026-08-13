@@ -100,6 +100,7 @@ with engine.connect() as _conn:
     _conn.execute(text('ALTER TABLE "HireUsageLog" ADD COLUMN IF NOT EXISTS output_tokens INTEGER DEFAULT 0'))
     _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS competency_scores_json TEXT'))
     _conn.execute(text('ALTER TABLE "CandidateResult" ALTER COLUMN recommendation TYPE VARCHAR(30)'))
+    _conn.execute(text('ALTER TABLE "CandidateResult" ADD COLUMN IF NOT EXISTS paste_suspicious_count INTEGER DEFAULT 0'))
     _conn.commit()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -2002,6 +2003,7 @@ class HireMessageBody(BaseModel):
 class HireSubmitBody(BaseModel):
     messages: list[AIInterviewMessage]
     paste_count: int = 0
+    paste_suspicious_count: int = 0  # of paste_count, how many did NOT match the current question's text (i.e. likely outside content, not the candidate copying the question back)
     tab_switch_count: int = 0
     fast_answer_count: int = 0
 
@@ -2452,17 +2454,33 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
     role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus) if assessment else "the role"
 
     transcript_text = "\n\n".join(f"{m.role.upper()}: {m.content}" for m in body.messages)
+    suspicious_pastes = max(0, min(body.paste_suspicious_count, body.paste_count))
+    question_copy_pastes = body.paste_count - suspicious_pastes
     integrity_block = (
         f"\n\n[INTEGRITY SIGNALS — captured automatically by the browser during the assessment, not derived from the writing itself]\n"
         f"- The candidate attempted to paste text {body.paste_count} time(s) (pasting is disabled in the answer box, so these attempts were blocked automatically and never reached the answer text).\n"
         f"- Candidate switched away from the assessment tab/window or exited fullscreen {body.tab_switch_count} time(s).\n"
         f"- {body.fast_answer_count} answer(s) were submitted unusually fast for their length.\n"
     )
-    if body.paste_count > 0:
+    if question_copy_pastes > 0:
         integrity_block += (
-            f"\nThis assessment has ZERO TOLERANCE for pasting — any attempt at all, even one, is an automatic reject regardless of how strong "
-            f"the typed content reads. Since paste_count is {body.paste_count} (greater than 0), overall_score MUST be 20 or lower and "
-            f"recommendation MUST be \"Not Recommended\". State this plainly as the primary reason in both summary and integrity_notes.\n"
+            f"\nOf those, {question_copy_pastes} paste attempt(s) closely matched the text of the question itself (consistent with the "
+            f"candidate copying or referencing the question, not inserting outside content) — treat these as minor and informational only, "
+            f"not a scoring concern.\n"
+        )
+    if suspicious_pastes == 1:
+        integrity_block += (
+            f"\nThe candidate made 1 paste attempt whose content did NOT match the question text — i.e. likely an attempt to insert outside or "
+            f"prepared content, though it was blocked automatically and never reached their answer. Treat this as a serious integrity concern: "
+            f"weigh it heavily and discuss it explicitly in integrity_notes. But this alone is not an automatic disqualifier — still weigh the "
+            f"actual quality and authenticity of what they typed across the whole transcript before settling on a score and recommendation.\n"
+        )
+    elif suspicious_pastes >= 2:
+        integrity_block += (
+            f"\nThe candidate made {suspicious_pastes} separate paste attempts whose content did NOT match the question text — a repeated "
+            f"pattern, not a one-off, strongly suggesting deliberate attempts to insert outside or prepared content. Because this is repeated "
+            f"and deliberate, overall_score MUST be 30 or lower and recommendation MUST be \"Not Recommended\". State this plainly as the "
+            f"primary reason in both summary and integrity_notes.\n"
         )
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -2493,7 +2511,8 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
         gaps_json=json.dumps(scored.get("gaps", [])), per_question_notes_json=json.dumps(scored.get("per_question_notes", [])),
         integrity_notes_json=json.dumps(scored.get("integrity_notes", [])),
         competency_scores_json=json.dumps(scored.get("competency_scores", [])),
-        paste_count=body.paste_count, tab_switch_count=body.tab_switch_count, fast_answer_count=body.fast_answer_count,
+        paste_count=body.paste_count, paste_suspicious_count=suspicious_pastes,
+        tab_switch_count=body.tab_switch_count, fast_answer_count=body.fast_answer_count,
     )
     db.add(result)
     invite.status = "completed"
@@ -2535,7 +2554,7 @@ def get_scorecard(assessment_id: str, invite_token: str, current_user: User = De
         "gaps": json.loads(result.gaps_json or "[]"), "per_question_notes": json.loads(result.per_question_notes_json or "[]"),
         "integrity_notes": json.loads(result.integrity_notes_json or "[]"),
         "competency_scores": json.loads(result.competency_scores_json or "[]"),
-        "paste_count": result.paste_count, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
+        "paste_count": result.paste_count, "paste_suspicious_count": result.paste_suspicious_count, "tab_switch_count": result.tab_switch_count, "fast_answer_count": result.fast_answer_count,
         "started_at": invite.started_at.isoformat() if invite.started_at else None,
         "completed_at": invite.completed_at.isoformat() if invite.completed_at else None,
         "qa_pairs": _extract_qa_pairs(result.transcript_json),
@@ -2594,7 +2613,8 @@ def _build_hire_scorecard_pdf(candidate_name: str, company_name: str, role_label
     ok_style = ParagraphStyle('OkX', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor('#15803d'), spaceBefore=10)
     flags = []
     if result.paste_count:
-        flags.append(f"Candidate attempted to paste text {result.paste_count} time(s) — blocked automatically (zero-tolerance policy)")
+        suspicious_note = f", {result.paste_suspicious_count} not matching the question text" if result.paste_suspicious_count else " — all matched the question text"
+        flags.append(f"Candidate attempted to paste text {result.paste_count} time(s) — blocked automatically{suspicious_note}")
     if result.tab_switch_count:
         flags.append(f"{result.tab_switch_count} tab/window switch(es) during the assessment")
     if result.fast_answer_count:
