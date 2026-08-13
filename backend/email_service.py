@@ -1,4 +1,5 @@
 import json
+import re
 import urllib.request
 import urllib.error
 from dotenv import load_dotenv
@@ -10,10 +11,20 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "AgileMentor <onboarding@resend.dev>")
 
 
-def send_email(to_email: str, subject: str, html_body: str) -> bool:
+def _from_address_only(from_str: str) -> str:
+    match = re.search(r'<(.+)>', from_str)
+    return match.group(1) if match else from_str
+
+
+# AgileHire is a separate product sharing this same sending domain/address — give it its own
+# display name so invite emails don't show up as "AgileMentor" in the candidate's inbox.
+HIRE_FROM_EMAIL = f"AgileHire <{_from_address_only(RESEND_FROM_EMAIL)}>"
+
+
+def send_email(to_email: str, subject: str, html_body: str, from_email: str = None) -> bool:
     try:
         payload = json.dumps({
-            "from": RESEND_FROM_EMAIL,
+            "from": from_email or RESEND_FROM_EMAIL,
             "to": [to_email],
             "subject": subject,
             "html": html_body,
@@ -262,7 +273,7 @@ def certificate_earned_email(full_name: str, program_title: str) -> str:
     """
 
 
-def assessment_invite_email(candidate_name: str, company_name: str, role_focus_label: str, take_link: str, num_questions: int = 5, duration_minutes: int = 30, logo_url: str = None) -> str:
+def assessment_invite_email(candidate_name: str, company_name: str, role_focus_label: str, take_link: str, num_questions: int = 5, duration_minutes: int = 30, logo_url: str = None, assessment_title: str = None) -> str:
     display_name = (candidate_name[:1].upper() + candidate_name[1:]) if candidate_name else candidate_name
     question_word = "question" if num_questions == 1 else "questions"
     header_brand = (
@@ -270,6 +281,7 @@ def assessment_invite_email(candidate_name: str, company_name: str, role_focus_l
         if logo_url else
         '<div style="font-size:1.2rem;font-weight:800;color:white;letter-spacing:-0.3px;">Agile<span style="color:#60A5FA;">Hire</span></div>'
     )
+    invited_to = f'the <strong>{assessment_title}</strong> assessment — a short {role_focus_label} hiring assessment' if assessment_title else f'a short {role_focus_label} hiring assessment'
     return f"""
     <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
       <div style="background:linear-gradient(135deg,#0F2645,#1a3a6b);padding:32px 36px;">
@@ -281,7 +293,7 @@ def assessment_invite_email(candidate_name: str, company_name: str, role_focus_l
         </div>
         <h2 style="font-size:1.3rem;font-weight:700;color:#0F2645;margin-bottom:8px;">You've been invited to an assessment</h2>
         <p style="font-size:0.9rem;color:#64748B;margin-bottom:24px;line-height:1.6;">
-          Hi {display_name}, <strong>{company_name}</strong> has invited you to complete a short {role_focus_label} hiring assessment.
+          Hi {display_name}, <strong>{company_name}</strong> has invited you to complete {invited_to}.
           It takes about {duration_minutes} minutes and covers {num_questions} realistic scenario {question_word} — no account or download needed.
         </p>
         <a href="{take_link}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#2563EB,#0EA5E9);color:white;font-weight:700;font-size:0.9rem;border-radius:10px;text-decoration:none;">

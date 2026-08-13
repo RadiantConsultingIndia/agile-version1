@@ -64,6 +64,7 @@ from email_service import (
     session_reminder_email, enrollment_confirmation_email, otp_verification_email,
     enrollment_request_admin_email, enrollment_approved_email, enrollment_rejected_email,
     certificate_earned_email, assessment_invite_email, candidate_abandoned_email,
+    HIRE_FROM_EMAIL,
 )
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -2362,8 +2363,9 @@ def invite_candidate(assessment_id: str, body: CandidateInviteBody, current_user
         num_questions=assessment.num_questions if assessment.num_questions else 5,
         duration_minutes=assessment.duration_minutes if assessment.duration_minutes else 30,
         logo_url=employer_profile.logo_url if employer_profile else None,
+        assessment_title=assessment.title,
     )
-    threading.Thread(target=send_email, args=(invite.candidate_email, f"You're invited: {role_label} Assessment", html)).start()
+    threading.Thread(target=send_email, args=(invite.candidate_email, f"You're invited: {assessment.title}", html), kwargs={"from_email": HIRE_FROM_EMAIL}).start()
 
     return {"success": True, "invite_token": invite.invite_token, "credits_remaining": access.credits_remaining}
 
@@ -2432,7 +2434,7 @@ def hire_quit(invite_token: str, db: Session = Depends(get_db)):
             role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus)
             dashboard_link = f"{HIRE_FRONTEND_URL}/employer/assessments/{assessment.assessment_id}"
             html = candidate_abandoned_email(invite.candidate_name, role_label, dashboard_link)
-            threading.Thread(target=send_email, args=(employer_user.email, f"{invite.candidate_name} did not complete the {role_label} assessment", html)).start()
+            threading.Thread(target=send_email, args=(employer_user.email, f"{invite.candidate_name} did not complete the {role_label} assessment", html), kwargs={"from_email": HIRE_FROM_EMAIL}).start()
 
     return {"success": True}
 
