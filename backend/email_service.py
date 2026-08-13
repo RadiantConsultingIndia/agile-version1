@@ -262,11 +262,18 @@ def certificate_earned_email(full_name: str, program_title: str) -> str:
     """
 
 
-def assessment_invite_email(candidate_name: str, company_name: str, role_focus_label: str, take_link: str) -> str:
+def assessment_invite_email(candidate_name: str, company_name: str, role_focus_label: str, take_link: str, num_questions: int = 5, duration_minutes: int = 30, logo_url: str = None) -> str:
+    display_name = (candidate_name[:1].upper() + candidate_name[1:]) if candidate_name else candidate_name
+    question_word = "question" if num_questions == 1 else "questions"
+    header_brand = (
+        f'<img src="{logo_url}" alt="{company_name}" style="max-height:32px;max-width:200px;object-fit:contain;">'
+        if logo_url else
+        '<div style="font-size:1.2rem;font-weight:800;color:white;letter-spacing:-0.3px;">Agile<span style="color:#60A5FA;">Hire</span></div>'
+    )
     return f"""
     <div style="font-family:'Inter',sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E2E8F4;">
       <div style="background:linear-gradient(135deg,#0F2645,#1a3a6b);padding:32px 36px;">
-        <div style="font-size:1.2rem;font-weight:800;color:white;letter-spacing:-0.3px;">Agile<span style="color:#60A5FA;">Hire</span></div>
+        {header_brand}
       </div>
       <div style="padding:36px;">
         <div style="display:inline-block;padding:4px 12px;background:#EEF2FF;color:#4338CA;font-size:0.75rem;font-weight:700;border-radius:20px;margin-bottom:16px;">
@@ -274,8 +281,8 @@ def assessment_invite_email(candidate_name: str, company_name: str, role_focus_l
         </div>
         <h2 style="font-size:1.3rem;font-weight:700;color:#0F2645;margin-bottom:8px;">You've been invited to an assessment</h2>
         <p style="font-size:0.9rem;color:#64748B;margin-bottom:24px;line-height:1.6;">
-          Hi {candidate_name}, <strong>{company_name}</strong> has invited you to complete a short {role_focus_label} hiring assessment.
-          It takes about 30 minutes and covers 5 realistic scenario questions — no account or download needed.
+          Hi {display_name}, <strong>{company_name}</strong> has invited you to complete a short {role_focus_label} hiring assessment.
+          It takes about {duration_minutes} minutes and covers {num_questions} realistic scenario {question_word} — no account or download needed.
         </p>
         <a href="{take_link}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#2563EB,#0EA5E9);color:white;font-weight:700;font-size:0.9rem;border-radius:10px;text-decoration:none;">
           Start Assessment →

@@ -2285,7 +2285,12 @@ def invite_candidate(assessment_id: str, body: CandidateInviteBody, current_user
     role_label = ROLE_FOCUS_LABELS.get(assessment.role_focus, assessment.role_focus)
     employer_profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == current_user.user_id).first()
     company_name = employer_profile.company_name if employer_profile else "A company"
-    html = assessment_invite_email(invite.candidate_name, company_name, role_label, take_link)
+    html = assessment_invite_email(
+        invite.candidate_name, company_name, role_label, take_link,
+        num_questions=assessment.num_questions if assessment.num_questions else 5,
+        duration_minutes=assessment.duration_minutes if assessment.duration_minutes else 30,
+        logo_url=employer_profile.logo_url if employer_profile else None,
+    )
     threading.Thread(target=send_email, args=(invite.candidate_email, f"You're invited: {role_label} Assessment", html)).start()
 
     return {"success": True, "invite_token": invite.invite_token, "credits_remaining": access.credits_remaining}
