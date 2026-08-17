@@ -136,7 +136,8 @@ export default function AdminUsers() {
 
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f1f5f9', boxShadow: '0 1px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8fafc' }}>
               {['User','Email','Role','Status','AI Interview','AI Practice','Hire Credits','Joined','Actions'].map(h => (
@@ -248,6 +249,7 @@ export default function AdminUsers() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </AdminLayout>
   )
