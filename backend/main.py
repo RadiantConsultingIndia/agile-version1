@@ -2258,6 +2258,63 @@ async def employer_upload_jd(file: UploadFile = File(...), current_user: User = 
         raise HTTPException(status_code=422, detail="Couldn't read text from that file. Please try a different PDF or DOCX file.")
     return {"jd_text": jd_text}
 
+CLASSIFY_ROLE_TOOL = {
+    "name": "classify_role",
+    "description": "Pick the single best-matching role for this job description from the 4 supported roles.",
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "role_focus": {"type": "string", "enum": list(ROLE_FOCUS_LABELS.keys())},
+            "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        },
+        "required": ["role_focus", "confidence"],
+        "additionalProperties": False,
+    },
+}
+
+class ClassifyJdRoleBody(BaseModel):
+    jd_text: str
+
+@app.post("/api/employer/classify-jd-role")
+def classify_jd_role(body: ClassifyJdRoleBody, current_user: User = Depends(require_employer)):
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="Role detection isn't configured right now.")
+    jd_text = (body.jd_text or "").strip()[:MAX_JD_TEXT_CHARS]
+    if len(jd_text) < 20:
+        raise HTTPException(status_code=400, detail="Job description text is too short to classify.")
+
+    role_descriptions = "\n\n".join(
+        f"{value} ({key}): {HIRE_ROLE_ANCHORS.get(value, '')}" for key, value in ROLE_FOCUS_LABELS.items()
+    )
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=100,
+            system=(
+                "You are classifying a job description into exactly one of 4 supported hiring-assessment role categories. "
+                "Pick whichever role this JD is actually for based on its responsibilities and requirements — even if the JD's "
+                "own job title doesn't literally match one of these names. If it doesn't clearly match any of the 4, pick the "
+                f"closest one and set confidence to \"low\".\n\n{role_descriptions}"
+            ),
+            tools=[CLASSIFY_ROLE_TOOL],
+            tool_choice={"type": "tool", "name": "classify_role"},
+            messages=[{"role": "user", "content": jd_text}],
+        )
+    except anthropic.APIError as e:
+        print(f"[CLASSIFY JD ROLE ERROR] {e}")
+        raise HTTPException(status_code=502, detail="Could not detect a role from this job description. Please pick one manually.")
+
+    tool_block = next((b for b in response.content if b.type == "tool_use"), None)
+    if tool_block is None:
+        raise HTTPException(status_code=502, detail="Could not detect a role from this job description. Please pick one manually.")
+    return {
+        "role_focus": tool_block.input.get("role_focus"),
+        "role_focus_label": ROLE_FOCUS_LABELS.get(tool_block.input.get("role_focus")),
+        "confidence": tool_block.input.get("confidence"),
+    }
+
 @app.get("/api/employer/assessments/{assessment_id}")
 def get_assessment(assessment_id: str, current_user: User = Depends(require_employer), db: Session = Depends(get_db)):
     assessment = _get_owned_assessment(assessment_id, current_user, db)
