@@ -28,12 +28,17 @@ _TREE = ast.parse(_SOURCE)
 
 
 def _parse_model_imports():
-    """{ClassName: 'models.module_name'} for every `from models.X import Y[, Z...]` line."""
+    """{local_name: (module_name, source_name)} for every `from models.X import Y [as Z]` line.
+    local_name is whatever main.py actually calls the class (the alias, if any — e.g. `MentorSession`
+    for `from models.session import Session as MentorSession`) — that's what appears in constructor
+    calls like `MentorSession(...)`. source_name is the name actually defined in the model file
+    itself (`Session`, in that example) — that's what needs to exist on the imported module; checking
+    for the alias there would incorrectly fail on any legitimately aliased import."""
     imports = {}
     for node in ast.walk(_TREE):
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("models."):
             for alias in node.names:
-                imports[alias.asname or alias.name] = node.module
+                imports[alias.asname or alias.name] = (node.module, alias.name)
     return imports
 
 
@@ -45,14 +50,14 @@ def _model_classes():
     broken model doesn't hide the results for every other model — the import-failure
     test below is what's supposed to surface that specific failure clearly."""
     classes = {}
-    for class_name, module_name in MODEL_IMPORTS.items():
+    for local_name, (module_name, source_name) in MODEL_IMPORTS.items():
         try:
             module = importlib.import_module(module_name)
-            cls = getattr(module, class_name, None)
+            cls = getattr(module, source_name, None)
         except Exception:
             cls = None
         if cls is not None and hasattr(cls, "__table__"):
-            classes[class_name] = cls
+            classes[local_name] = cls
     return classes
 
 
@@ -74,16 +79,19 @@ def _find_model_constructor_calls():
 CONSTRUCTOR_CALLS = _find_model_constructor_calls()
 
 
+_IMPORT_CASES = sorted((local_name, module_name, source_name) for local_name, (module_name, source_name) in MODEL_IMPORTS.items())
+
+
 @pytest.mark.parametrize(
-    "class_name,module_name",
-    sorted(MODEL_IMPORTS.items()),
-    ids=[f"{c}<-{m}" for c, m in sorted(MODEL_IMPORTS.items())],
+    "local_name,module_name,source_name",
+    _IMPORT_CASES,
+    ids=[f"{local}<-{mod}.{src}" for local, mod, src in _IMPORT_CASES],
 )
-def test_every_imported_model_file_exists_and_exports_its_class(class_name, module_name):
+def test_every_imported_model_file_exists_and_exports_its_class(local_name, module_name, source_name):
     module = importlib.import_module(module_name)
-    assert hasattr(module, class_name), (
-        f"main.py imports `{class_name}` from `{module_name}`, but that module has no such attribute. "
-        f"Either the model file wasn't deployed, or the class was renamed."
+    assert hasattr(module, source_name), (
+        f"main.py imports `{source_name}` from `{module_name}` (as `{local_name}`), but that module has "
+        f"no such attribute. Either the model file wasn't deployed, or the class was renamed."
     )
 
 
