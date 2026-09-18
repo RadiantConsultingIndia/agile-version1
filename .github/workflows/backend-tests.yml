@@ -14,6 +14,26 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      # main.py runs real ALTER TABLE migrations the moment it's imported (not deferred), including
+      # Postgres-specific syntax an in-memory SQLite DB can't run — so functional tests that actually
+      # `import main` need a real, working Postgres to connect to, not just a syntactically-valid URL.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test_db
+      SECRET_KEY: ci-test-secret-key-not-for-production
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +45,6 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run tests
-        # Scoped to this file deliberately — test_cloudinary.py and test_db.py are pre-existing,
-        # unrelated, and already broken without real credentials; not fixing those here.
-        run: pytest -v test_model_consistency.py
+        # test_cloudinary.py and test_db.py are pre-existing, unrelated ad-hoc scripts that need
+        # real credentials — deliberately excluded, not fixed here.
+        run: pytest -v --ignore=test_cloudinary.py --ignore=test_db.py
