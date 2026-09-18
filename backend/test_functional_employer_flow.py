@@ -69,7 +69,7 @@ def test_create_assessment_blocked_jd_content_rejected_without_calling_ai(employ
     fake_client = patch_anthropic_client(monkeypatch, make_classify_response())
     res = employer_client.post("/api/employer/assessments", json={
         "title": "Bad JD", "role_focus": "scrum_master",
-        "jd_text": "We need someone who will kill everyone on the competing team's product.",
+        "jd_text": "Candidates who don't meet our standards will be treated as subhuman by this team.",
     })
     assert res.status_code == 422
     assert fake_client.messages.last_call_kwargs is None  # never reached Claude
