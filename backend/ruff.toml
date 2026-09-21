@@ -1,0 +1,9 @@
+# Deliberately narrow rule set for a first rollout on an existing, unlinted codebase — this is
+# about catching real bugs (unused imports, undefined names, bare excepts), not enforcing a full
+# style guide on code that already works. Security-specific checks are bandit's job, not ruff's,
+# so the "S" (security) rule category is intentionally left out here to avoid overlapping/
+# conflicting findings between the two tools.
+line-length = 200
+
+[lint]
+select = ["E", "F", "W", "I"]
