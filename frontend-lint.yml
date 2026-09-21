@@ -1,0 +1,33 @@
+name: AgileMentor Frontend Lint
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+  pull_request:
+    paths:
+      - "frontend/**"
+  workflow_dispatch: {}  # lets you trigger this manually from the Actions tab, even with no frontend changes
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        # Report-only for now — ESLint was already configured here but nothing ever ran it in CI,
+        # so this may surface pre-existing issues nobody's reviewed yet. Once we've looked at the
+        # first results and cleaned up anything real, remove continue-on-error to make this a hard gate.
+        continue-on-error: true
+        run: npm run lint
