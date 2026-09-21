@@ -4,11 +4,13 @@ import json
 import csv
 import io
 import secrets
-import random
 import threading
 import anthropic
 from datetime import datetime, timezone, timedelta
-from xml.sax.saxutils import escape as xml_escape
+# nosec B406 — bandit flags any xml.sax import for XXE risk, but `escape()` is a plain string-
+# escaping utility (turns <, >, & into safe entities), not an XML parser — it never parses
+# untrusted XML, so the XXE risk that rule is warning about doesn't apply to this usage.
+from xml.sax.saxutils import escape as xml_escape  # nosec B406
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -597,7 +599,7 @@ def resend_otp(request: Request, body: ResendOTPBody, db: Session = Depends(get_
 
     db.query(EmailOTP).filter(EmailOTP.user_id == body.user_id, EmailOTP.is_used == False).update({"is_used": True})
 
-    otp_code = str(random.randint(100000, 999999))
+    otp_code = str(secrets.randbelow(900000) + 100000)  # 6-digit code, same [100000, 999999] range as before
     otp = EmailOTP(
         otp_id=generate_otp_id(db), user_id=body.user_id, otp_code=otp_code,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
@@ -3233,8 +3235,11 @@ def leave_session(session_id: str, current_user: User = Depends(require_mentee),
                 diff = (datetime.fromisoformat(interval["leave"]) - datetime.fromisoformat(interval["join"])).total_seconds()
                 if diff > 0:
                     total_seconds += diff
-            except Exception:
-                pass
+            except Exception as e:
+                # Skip just this malformed interval rather than failing the whole request — but
+                # log it, since silently swallowing every parse error here would hide a real
+                # data-quality bug in how join_intervals gets written.
+                print(f"[ATTENDANCE INTERVAL PARSE ERROR] session={session_id} user={current_user.user_id}: {e}")
 
     total_minutes = int(total_seconds / 60)
     duration_minutes = session.duration_minutes or 0

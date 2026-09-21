@@ -40,7 +40,10 @@ def send_email(to_email: str, subject: str, html_body: str, from_email: str = No
             },
             method="POST",
         )
-        with urllib.request.urlopen(req) as resp:
+        # nosec B310 — bandit flags urlopen() generically for arbitrary-scheme risk (e.g. file://),
+        # but `req`'s URL above is a hardcoded literal ("https://api.resend.com/emails"), never
+        # derived from any caller-supplied input, so that risk doesn't apply here.
+        with urllib.request.urlopen(req) as resp:  # nosec B310
             return resp.status == 200
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
