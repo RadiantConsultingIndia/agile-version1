@@ -2685,21 +2685,30 @@ def hire_submit(request: Request, invite_token: str, body: HireSubmitBody, db: S
         )
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    try:
-        response = client.messages.create(
-            model="claude-sonnet-5",
-            max_tokens=3000,
-            thinking={"type": "disabled"},
-            system=_build_hire_scoring_system_prompt(company_name, role_label, assessment.jd_text if assessment else None),
-            tools=[HIRE_SCORING_TOOL],
-            tool_choice={"type": "tool", "name": "submit_candidate_scorecard"},
-            messages=[{"role": "user", "content": transcript_text + integrity_block}],
-        )
-    except anthropic.APIError as e:
-        print(f"[HIRE SUBMIT ERROR] {e}")
-        raise HTTPException(status_code=502, detail="Could not score this assessment. Please try again.")
+    tool_block = None
+    last_error = None
+    # One retry: a candidate's final submission is a one-shot action, so a transient API
+    # blip (rate limit/overload) shouldn't force them to redo the whole assessment.
+    for attempt in range(2):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-5",
+                max_tokens=3000,
+                thinking={"type": "disabled"},
+                system=_build_hire_scoring_system_prompt(company_name, role_label, assessment.jd_text if assessment else None),
+                tools=[HIRE_SCORING_TOOL],
+                tool_choice={"type": "tool", "name": "submit_candidate_scorecard"},
+                messages=[{"role": "user", "content": transcript_text + integrity_block}],
+            )
+        except anthropic.APIError as e:
+            last_error = e
+            print(f"[HIRE SUBMIT ERROR] attempt {attempt + 1}: {e}")
+            continue
+        tool_block = next((b for b in response.content if b.type == "tool_use"), None)
+        if tool_block is not None:
+            break
+        print(f"[HIRE SUBMIT ERROR] attempt {attempt + 1}: no tool_use block in response")
 
-    tool_block = next((b for b in response.content if b.type == "tool_use"), None)
     if tool_block is None:
         raise HTTPException(status_code=502, detail="Could not score this assessment. Please try again.")
     scored = tool_block.input
