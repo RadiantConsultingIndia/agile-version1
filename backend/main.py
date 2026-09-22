@@ -2096,8 +2096,8 @@ HIRE_EXPERIENCE_TEXT = {
 
 HIRE_QUESTION_STYLE_TEXT = {
     "scenario": "Frame each question as a scenario: describe a realistic on-the-job situation in 2-4 concise sentences, then ask what the candidate would do.",
-    "situational": "Frame each question as a direct situational-judgment call: a shorter, punchier \"what would you do if...\" setup rather than a long narrative — get to the judgment call quickly.",
-    "short_answer": "Do NOT describe a scenario, situation, or any invented backstory — no team names, no narrative setup, no multi-sentence context. Ask a single, direct question in one sentence about the candidate's general approach, judgment, or practice (e.g. \"How do you handle a disagreement between two senior engineers?\" or \"What's your approach when a PO wants to add scope mid-sprint?\"), and explicitly tell the candidate 2-4 sentences is plenty for their answer.",
+    "situational": "Keep the setup to ONE short sentence maximum — no team names, no sprint numbers, no multi-sentence backstory. State the judgment call directly, e.g. \"What would you do if a VP tried to pull the team off sprint work for an unplanned demo?\" — a single punchy sentence, not a mini-narrative. If your setup needs more than one sentence, it's too long for this style.",
+    "short_answer": "Do NOT describe a scenario, situation, or any invented backstory at all — no team names, no sprint numbers, no narrative setup of any length. Ask a single, direct question about the candidate's general approach, judgment, or practice, with zero situational framing (e.g. \"How do you handle a disagreement between two senior engineers?\" not \"Two engineers are disagreeing — what would you do?\"), and explicitly tell the candidate 2-4 sentences is plenty for their answer.",
 }
 HIRE_QUESTION_STYLE_LABEL = {"scenario": "Scenario", "situational": "Situation", "short_answer": "Question"}
 
