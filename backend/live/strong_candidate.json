@@ -1,0 +1,16 @@
+{
+  "role_focus_label": "Scrum Master",
+  "company_name": "Test Co",
+  "expected": {
+    "score_range": [70, 100],
+    "recommendation_in": ["Strong Match", "Consider"]
+  },
+  "messages": [
+    {"role": "user", "content": "Hi, I'm ready to start the assessment."},
+    {"role": "assistant", "content": "**Scenario 1:**\n\nTwo senior engineers on your team have a public disagreement in standup about whether to refactor a shared module now or after the sprint. The disagreement is starting to affect team morale.\n\nWhat would you do?"},
+    {"role": "user", "content": "I'd first pull both of them into a quick separate conversation right after standup, not in front of the team, since public conflict tends to make people dig in. I'd ask each of them to walk me through their reasoning so I actually understand the technical trade-off, not just referee a personality clash. Then I'd bring them together to look at it as a shared problem: what's the actual risk of refactoring now versus deferring, and does the team have the capacity either way given current sprint commitments. If we can't reach agreement quickly, I'd time-box a decision, loop in the tech lead or PO if it affects delivery, and make sure the decision and reasoning are visible to the whole team so it doesn't look like favoritism. Afterward I'd check in with both of them privately to make sure the relationship is okay, since standup conflicts can linger."},
+    {"role": "assistant", "content": "Thanks, let's move to the next one.\n\n**Scenario 2:**\n\nYour Product Owner wants to add three new stories mid-sprint because a client is threatening to churn. The team already committed to a full sprint backlog.\n\nWhat would you do?"},
+    {"role": "user", "content": "I'd start by understanding the actual urgency — is this genuinely sprint-critical or does it just feel urgent to the PO. I'd ask what happens if we wait until next sprint versus what breaks if we don't act now. If it's truly urgent, I wouldn't just cram it in; I'd facilitate a conversation with the team about what gets deprioritized to make room, since scope is a trade-off, not something that's free to add. I'd also flag the risk to sprint predictability to the PO directly — that repeatedly breaking sprint commitments erodes the team's ability to forecast and erodes trust with stakeholders who rely on our estimates. If it's not truly urgent, I'd coach the PO on using the backlog and prioritization process instead of using churn threats as a lever to bypass planning, while still taking the underlying client concern seriously."},
+    {"role": "assistant", "content": "Thanks, that's everything — thank you for your time today! Test Co will review your responses and follow up if there's a match. [[ASSESSMENT_COMPLETE]]"}
+  ]
+}

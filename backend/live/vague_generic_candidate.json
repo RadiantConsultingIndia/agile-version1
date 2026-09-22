@@ -1,0 +1,16 @@
+{
+  "role_focus_label": "Scrum Master",
+  "company_name": "Test Co",
+  "expected": {
+    "score_range": [0, 55],
+    "recommendation_in": ["Needs Further Evaluation", "Not Recommended", "Consider"]
+  },
+  "messages": [
+    {"role": "user", "content": "Hi, I'm ready to start the assessment."},
+    {"role": "assistant", "content": "**Scenario 1:**\n\nTwo senior engineers on your team have a public disagreement in standup about whether to refactor a shared module now or after the sprint. The disagreement is starting to affect team morale.\n\nWhat would you do?"},
+    {"role": "user", "content": "I would use good communication skills and facilitate a discussion to resolve the conflict in a professional manner, ensuring all stakeholders are aligned and the team stays focused on delivering value."},
+    {"role": "assistant", "content": "Thanks, let's move to the next one.\n\n**Scenario 2:**\n\nYour Product Owner wants to add three new stories mid-sprint because a client is threatening to churn. The team already committed to a full sprint backlog.\n\nWhat would you do?"},
+    {"role": "user", "content": "I would leverage agile best practices and collaborate with the Product Owner to prioritize effectively while maintaining transparency with all stakeholders and ensuring the team's velocity is protected."},
+    {"role": "assistant", "content": "Thanks, that's everything — thank you for your time today! Test Co will review your responses and follow up if there's a match. [[ASSESSMENT_COMPLETE]]"}
+  ]
+}
