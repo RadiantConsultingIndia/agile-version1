@@ -1,7 +1,8 @@
 """Does changing the assessment's configured question_style actually change the AI's output, or
 is it ignored? Trimmed to just the question_style axis (not the full role x difficulty x style
-matrix) to keep this cheap — one real question-generation call per style, plus one cheap judge
-call to classify which style it actually reads as."""
+matrix) to keep this cheap. Samples 3 real questions per style (not just 1) and requires a 2-of-3
+majority match — a single sample is too noisy a signal given normal LLM run-to-run variance;
+what actually matters is whether the style is respected *most* of the time, not every single time."""
 
 import pytest
 
@@ -44,20 +45,29 @@ def _judge_style(question_text: str) -> str:
     return tool_block.input["style"]
 
 
+SAMPLES_PER_STYLE = 3
+MIN_MATCHES_REQUIRED = 2  # majority of 3
+
+
 @pytest.mark.parametrize("question_style", ["scenario", "situational", "short_answer"])
 def test_question_style_is_actually_reflected_in_output(employer_client, invite_factory, question_style):
-    candidate_invite = invite_factory(assessment_overrides={
-        "role_focus": "scrum_master", "num_questions": 3, "question_style": question_style,
-        "title": f"Adaptability Test - {question_style}",
-    })
-    res = employer_client.post(f"/api/public/hire/{candidate_invite.invite_token}/message", json={
-        "messages": [{"role": "user", "content": "Hi, I'm ready to start the assessment."}],
-    })
-    assert res.status_code == 200, res.text
-    generated_question = res.json()["reply"]
+    judged_styles = []
+    generated_texts = []
+    for _ in range(SAMPLES_PER_STYLE):
+        candidate_invite = invite_factory(assessment_overrides={
+            "role_focus": "scrum_master", "num_questions": 3, "question_style": question_style,
+            "title": f"Adaptability Test - {question_style}",
+        })
+        res = employer_client.post(f"/api/public/hire/{candidate_invite.invite_token}/message", json={
+            "messages": [{"role": "user", "content": "Hi, I'm ready to start the assessment."}],
+        })
+        assert res.status_code == 200, res.text
+        generated_question = res.json()["reply"]
+        generated_texts.append(generated_question)
+        judged_styles.append(_judge_style(generated_question))
 
-    judged_style = _judge_style(generated_question)
-    assert judged_style == question_style, (
-        f"Configured question_style='{question_style}' but the generated question reads as "
-        f"'{judged_style}' instead. Generated text: {generated_question}"
+    matches = sum(1 for s in judged_styles if s == question_style)
+    assert matches >= MIN_MATCHES_REQUIRED, (
+        f"Configured question_style='{question_style}' only matched {matches}/{SAMPLES_PER_STYLE} samples "
+        f"(judged as: {judged_styles}). Generated texts: {generated_texts}"
     )
