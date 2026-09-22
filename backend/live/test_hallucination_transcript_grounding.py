@@ -39,9 +39,12 @@ MIN_GROUNDED_RATIO = 0.9
 
 
 def _collect_claims(scorecard: dict) -> list[str]:
+    # "gaps" is deliberately excluded: per its own tool-schema description in main.py, it's
+    # "areas the recruiter should explore further" — forward-looking suggestions about what
+    # wasn't covered, not claims about what the candidate said. They can never be "grounded in
+    # the transcript" by definition, so checking them here would just be testing the wrong thing.
     claims = [scorecard["summary"]]
     claims += scorecard.get("strengths", [])
-    claims += scorecard.get("gaps", [])
     claims += [n["assessment"] for n in scorecard.get("per_question_notes", [])]
     return [c for c in claims if c and c.strip()]
 
@@ -52,7 +55,17 @@ def test_scorecard_claims_are_grounded_in_the_transcript(employer_client, invite
     claims = _collect_claims(scorecard)
     assert claims, "No claims found on the scorecard to check — summary/strengths/gaps/notes were all empty."
 
+    # The scoring prompt legitimately gives the AI browser-captured integrity signals (paste/tab
+    # switch/fast-answer counts) alongside the Q&A transcript — a claim like "no integrity red
+    # flags" is grounded in that data, not in the Q&A text alone, so the judge needs it too.
     transcript_text = "\n\n".join(qa["question"] + "\n" + qa["answer"] for qa in scorecard["qa_pairs"])
+    transcript_text += (
+        f"\n\n[INTEGRITY SIGNALS]\nPaste attempts: {scorecard.get('paste_count', 0)} "
+        f"({scorecard.get('paste_suspicious_count', 0)} not matching question text)\n"
+        f"Tab/window switches: {scorecard.get('tab_switch_count', 0)}\n"
+        f"Unusually fast answers: {scorecard.get('fast_answer_count', 0)}\n"
+        f"Timed out: {scorecard.get('timed_out', False)}"
+    )
     claims_block = "\n".join(f"- {c}" for c in claims)
 
     client = main.anthropic.Anthropic(api_key=main.ANTHROPIC_API_KEY)
