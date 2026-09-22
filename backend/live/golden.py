@@ -13,7 +13,11 @@ def load_golden(name: str) -> dict:
     return json.loads((GOLDEN_DIR / f"{name}.json").read_text(encoding="utf-8"))
 
 
-def submit_golden_transcript(employer_client, invite_factory, golden: dict, num_questions: int = 2) -> dict:
+def submit_golden_transcript(employer_client, invite_factory, golden: dict, num_questions: int = 3) -> dict:
+    # num_questions must be >= 3 — that's the app's own validation floor (see AssessmentBody),
+    # even though these golden transcripts only have 2 real Q&A exchanges. That's fine: the
+    # min_messages check in hire_submit is just a floor (max(2, num_questions*2-2) = 4 here),
+    # and the transcript's 6 messages clear it regardless of what num_questions is configured to.
     """Creates a real assessment + invite, submits the golden transcript for real scoring
     through the actual /submit endpoint, and returns the resulting scorecard."""
     candidate_invite = invite_factory(assessment_overrides={
