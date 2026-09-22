@@ -64,6 +64,13 @@ def test_question_style_is_actually_reflected_in_output(employer_client, invite_
         assert res.status_code == 200, res.text
         generated_question = res.json()["reply"]
         generated_texts.append(generated_question)
+        if not generated_question.strip():
+            # An empty reply is itself a failure to reflect the configured style — count it as a
+            # non-match rather than sending empty content to the judge call, which the Anthropic
+            # API rejects outright (400 invalid_request_error), crashing the whole test instead of
+            # just this one sample.
+            judged_styles.append("(empty reply)")
+            continue
         judged_styles.append(_judge_style(generated_question))
 
     matches = sum(1 for s in judged_styles if s == question_style)
