@@ -47,8 +47,10 @@ jobs:
 
       - name: Run tests
         # test_cloudinary.py and test_db.py are pre-existing, unrelated ad-hoc scripts that need
-        # real credentials — deliberately excluded, not fixed here.
-        run: pytest -v --ignore=test_cloudinary.py --ignore=test_db.py
+        # real credentials — deliberately excluded, not fixed here. live/ is excluded because it
+        # makes real, billed Claude API calls — it runs on its own schedule via ai-eval-live.yml,
+        # never on every push.
+        run: pytest -v --ignore=test_cloudinary.py --ignore=test_db.py --ignore=live
 
   static-analysis:
     runs-on: ubuntu-latest

@@ -1,0 +1,57 @@
+name: AI Evaluation (live)
+
+on:
+  workflow_dispatch: {}  # run manually from the Actions tab anytime
+  schedule:
+    - cron: "0 4 * * 1"  # every Monday, 4:00 UTC (~9:30am IST)
+
+jobs:
+  ai-eval:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    # Same throwaway Postgres setup as the fast test suite — these tests go through the real
+    # /submit and /message endpoints (not a reimplementation of the scoring logic), so they need
+    # the same working database the fast suite does.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test_db
+      SECRET_KEY: ci-test-secret-key-not-for-production
+      # Must be a real key, added as a repo secret (Settings -> Secrets and variables -> Actions).
+      # Without it, live/conftest.py deliberately skips every test in this workflow rather than fail.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run live AI evaluation tests
+        # -s so print() output (the bias/diversity comparison table especially) shows up in the
+        # log for a human to actually read, not just the pass/fail result.
+        run: pytest -v -s live/ --junitxml=live-eval-results.xml
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-eval-results
+          path: backend/live-eval-results.xml
