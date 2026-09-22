@@ -6,7 +6,7 @@ exercises the exact same code path a real candidate submission goes through."""
 import json
 from pathlib import Path
 
-GOLDEN_DIR = Path(__file__).resolve().parent / "golden_transcripts"
+GOLDEN_DIR = Path(__file__).resolve().parent  # the .json fixture files live alongside this file, in live/
 
 
 def load_golden(name: str) -> dict:
