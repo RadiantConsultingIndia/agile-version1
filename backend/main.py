@@ -28,6 +28,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, text
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, field_validator
 from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -2250,17 +2251,28 @@ def create_assessment(request: Request, body: AssessmentBody, current_user: User
         blocked, _category = guardrails.contains_blocked_content(jd_text)
         if blocked:
             raise HTTPException(status_code=422, detail="This job description couldn't be processed. Please check its content and try again.")
-    assessment = Assessment(
-        assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
-        title=body.title.strip(), role_focus=body.role_focus, require_id_upload=body.require_id_upload,
-        jd_text=jd_text, description=(body.description or "").strip() or None,
-        experience_level=body.experience_level, num_questions=body.num_questions,
-        duration_minutes=body.duration_minutes, difficulty=body.difficulty, question_style=body.question_style,
-    )
-    db.add(assessment)
-    if jd_text:
-        _save_employer_jd(db, current_user.user_id, body.title.strip(), jd_text)
-    db.commit()
+    # generate_assessment_id reads the current max ID and picks the next one, which is not
+    # atomic — two concurrent requests can both land on the same candidate ID and one loses the
+    # unique-constraint race at commit. A load test at 100 concurrent users surfaced exactly this
+    # (5 real 500s), so retry once with a freshly generated ID rather than failing the request.
+    for attempt in range(3):
+        assessment = Assessment(
+            assessment_id=generate_assessment_id(db), employer_user_id=current_user.user_id,
+            title=body.title.strip(), role_focus=body.role_focus, require_id_upload=body.require_id_upload,
+            jd_text=jd_text, description=(body.description or "").strip() or None,
+            experience_level=body.experience_level, num_questions=body.num_questions,
+            duration_minutes=body.duration_minutes, difficulty=body.difficulty, question_style=body.question_style,
+        )
+        db.add(assessment)
+        try:
+            if jd_text:
+                _save_employer_jd(db, current_user.user_id, body.title.strip(), jd_text)
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+            if attempt == 2:
+                raise HTTPException(status_code=409, detail="Could not create the assessment due to a conflict. Please try again.")
     return {"success": True, "assessment_id": assessment.assessment_id}
 
 @app.get("/api/employer/jds")
